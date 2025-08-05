@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Papa from 'papaparse';
 import {
   VerticalTimeline,
@@ -8,10 +8,18 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
+import { Input } from './ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface AuditEvent {
   created_timestamp: string;
@@ -155,6 +163,8 @@ export default function AuditTimeline() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'upload' | 'timeline'>('upload');
   const [file, setFile] = useState<File | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedEntity, setSelectedEntity] = useState('all');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -204,20 +214,61 @@ export default function AuditTimeline() {
     setFileName(null);
     setFile(null);
     setError(null);
+    setSearchTerm('');
+    setSelectedEntity('all');
   }
+
+  const entities = useMemo(() => {
+    const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
+    return ['all', ...uniqueEntities];
+  }, [data]);
+
+  const filteredData = useMemo(() => {
+    return data.filter(event => {
+        const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
+        const searchMatch = searchTerm === '' || 
+            Object.values(event).some(value => 
+                String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        return entityMatch && searchMatch;
+    });
+  }, [data, searchTerm, selectedEntity]);
 
   if (view === 'timeline') {
     return (
         <div>
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
                  <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-primary"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 7.82566 4.41707 4.33857 7.99933 2.99961M12 2V12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 2C6.47715 2 2 6.47715 2 12C2 16.1743 4.41707 19.6614 7.99933 21.0004" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 4"/></svg>
                     Audit Log Timeline
                 </h1>
-                <Button onClick={handleUploadNew}>Upload New File</Button>
+                <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-auto">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                            placeholder="Search logs..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="pl-10 w-full sm:w-64"
+                        />
+                    </div>
+                    <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="Filter by entity" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {entities.map(entity => (
+                                <SelectItem key={entity} value={entity}>
+                                    {entity === 'all' ? 'All Entities' : entity}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
+                </div>
             </div>
             <VerticalTimeline lineColor={'hsl(var(--border))'}>
-            {data.map((event, index) => {
+            {filteredData.map((event, index) => {
                 const { created_timestamp, entity_name, action } = event;
                  if (!created_timestamp || !action) {
                     return null;
