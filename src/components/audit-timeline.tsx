@@ -272,7 +272,7 @@ const renderPreview = (event: AuditEvent) => {
     const PREVIEW_LIMIT = 2;
 
     try {
-        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && payload) {
+        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert') || lowerCaseAction.includes('delete')) && payload) {
             const parsedPayload = JSON.parse(payload);
             const entries = Object.entries(parsedPayload);
             if (entries.length > 0) {
@@ -313,9 +313,6 @@ const renderPreview = (event: AuditEvent) => {
             }
         }
         
-        if (lowerCaseAction.includes('delete') && payload) {
-            return <p className="text-sm mt-2 text-muted-foreground">Deleted record data is available in the full details view.</p>
-        }
     } catch(e) {
         // Fallback for parsing errors
         return <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>;

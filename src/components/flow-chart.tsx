@@ -19,6 +19,7 @@ const flowStages = [
     name: 'Physical Purchase Trade',
     icon: ShoppingCart,
     entities: ['trade'],
+    dynamic_label: true,
   },
   {
     name: 'Container Shipment',
@@ -49,6 +50,17 @@ type FlowChartProps = {
 };
 
 export default function FlowChart({ data, onStageClick, selectedEntities }: FlowChartProps) {
+  const tradeStageName = useMemo(() => {
+    const tradeEvents = data.filter(event => event.entity_name.toLowerCase().includes('trade'));
+    const hasPurchase = tradeEvents.some(event => JSON.stringify(event).toLowerCase().includes('purchase'));
+    const hasSell = tradeEvents.some(event => JSON.stringify(event).toLowerCase().includes('sell'));
+
+    if(hasPurchase) return 'Purchase Trade';
+    if(hasSell) return 'Sell Trade';
+
+    return 'Physical Purchase Trade';
+  }, [data]);
+
   const activeStages = useMemo(() => {
     const active = new Set<string>();
     data.forEach(event => {
@@ -92,7 +104,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         >
                         <stage.icon className="w-6 h-6" />
                         </div>
-                        <p className="text-xs font-semibold">{stage.name}</p>
+                        <p className="text-xs font-semibold">{stage.dynamic_label ? tradeStageName : stage.name}</p>
                     </Button>
                     {index < flowStages.length - 1 && (
                         <ChevronRight className="w-8 h-8 text-muted-foreground mx-4 hidden sm:block" />
