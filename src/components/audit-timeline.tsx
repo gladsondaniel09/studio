@@ -76,11 +76,11 @@ const renderDetails = (event: AuditEvent) => {
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
                     {differences.map((diff: any, index: number) => (
                         <div key={index}>
-                            <p className="font-bold text-sm capitalize">{diff.field.replace(/_/g, ' ')}</p>
+                            <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
                             <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground">{diff.old_value || 'none'}</span>
+                                <span className="text-muted-foreground">{diff.oldValue ?? 'none'}</span>
                                 <ArrowRight className="w-4 h-4 text-primary" />
-                                <span>{diff.new_value || 'none'}</span>
+                                <span>{diff.newValue ?? 'none'}</span>
                             </div>
                         </div>
                     ))}
