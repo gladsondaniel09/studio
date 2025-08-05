@@ -422,7 +422,7 @@ export default function AuditTimeline() {
         element: '#timeline-event-card',
         title: 'Timeline Events',
         content: 'Each card represents an audit event. You can see a quick preview of the changes here. For full details, click the expand icon.',
-        placement: 'right',
+        placement: 'bottom',
     },
   ]
 
