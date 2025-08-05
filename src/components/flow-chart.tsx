@@ -29,7 +29,7 @@ const flowStages = [
   {
     name: 'Actualization',
     icon: CheckCircle,
-    entities: ['actualization'],
+    entities: ['actualization', 'actualizedquantityobligations'],
   },
   {
     name: 'Pricing',
@@ -85,7 +85,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         variant="ghost"
                         onClick={() => onStageClick(stage.entities)}
                         className={cn(
-                            'flex flex-col items-center text-center text-foreground gap-2 w-full h-auto p-2 rounded-md transition-all',
+                            'flex flex-col items-center text-center gap-2 w-full h-auto p-2 rounded-md transition-all',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20 border-primary border'
                                 : '',
@@ -98,7 +98,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         className={cn(
                             'flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all',
                             activeStages.has(stage.name)
-                            ? 'bg-primary/10 border-primary text-primary'
+                            ? 'bg-primary/10 border-primary'
                             : 'bg-muted border-border',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20'
