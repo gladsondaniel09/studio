@@ -146,6 +146,48 @@ const getIconForEvent = (eventType: string) => {
   return <File />;
 };
 
+const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => {
+    const [showAll, setShowAll] = useState(false);
+    const limit = 4;
+    
+    const visibleItems = showAll ? items : items.slice(0, limit);
+
+    return (
+        <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
+                {visibleItems.map((item: any, index: number) => {
+                    if(type === 'diff') {
+                        return (
+                             <div key={index}>
+                                <p className="font-bold text-sm capitalize">{(item.label || item.field).replace(/_/g, ' ')}</p>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-muted-foreground break-all">{String(item.oldValue ?? 'none')}</span>
+                                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                                    <span className='break-all'>{String(item.newValue ?? 'none')}</span>
+                                </div>
+                            </div>
+                        )
+                    }
+                    const [key, value] = item;
+                     return (
+                        <div key={key}>
+                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm break-all">{String(value)}</p>
+                        </div>
+                    )
+                })}
+            </div>
+            {items.length > limit && (
+                 <div className="text-right mt-4">
+                    <Button variant="link" onClick={() => setShowAll(!showAll)}>
+                        {showAll ? 'Show Less' : `Show ${items.length - limit} More`}
+                    </Button>
+                </div>
+            )}
+        </div>
+    )
+}
+
 const renderDetails = (event: AuditEvent) => {
     const { action, payload, difference_list } = event;
     const lowerCaseAction = action.toLowerCase();
@@ -169,16 +211,7 @@ const renderDetails = (event: AuditEvent) => {
     if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && rawPayload) {
         const entries = Object.entries(rawPayload);
         if (entries.length > 0) {
-            formattedView = (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
-                    {entries.map(([key, value]) => (
-                        <div key={key}>
-                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm break-all">{String(value)}</p>
-                        </div>
-                    ))}
-                </div>
-            );
+            formattedView = <DetailView items={entries} type="key-value" />;
         } else {
              formattedView = <p className="text-sm">{payload}</p>;
         }
@@ -186,20 +219,7 @@ const renderDetails = (event: AuditEvent) => {
 
     else if ((lowerCaseAction.includes('update')) && rawDiffList) {
         if (Array.isArray(rawDiffList) && rawDiffList.length > 0) {
-            formattedView = (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
-                    {rawDiffList.map((diff: any, index: number) => (
-                        <div key={index}>
-                            <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground break-all">{String(diff.oldValue ?? 'none')}</span>
-                                <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                <span className='break-all'>{String(diff.newValue ?? 'none')}</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            );
+            formattedView = <DetailView items={rawDiffList} type="diff" />;
         } else {
              formattedView = <p className="text-sm mt-4">{difference_list}</p>;
         }
@@ -208,16 +228,7 @@ const renderDetails = (event: AuditEvent) => {
     else if (lowerCaseAction.includes('delete') && rawPayload) {
          const entries = Object.entries(rawPayload);
         if (entries.length > 0) {
-            formattedView = (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
-                    {entries.map(([key, value]) => (
-                        <div key={key}>
-                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm break-all">{String(value)}</p>
-                        </div>
-                    ))}
-                </div>
-            );
+            formattedView = <DetailView items={entries} type="key-value" />;
         } else {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
@@ -226,16 +237,7 @@ const renderDetails = (event: AuditEvent) => {
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
-            formattedView = (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
-                    {detailsToShow.map(([key, value]) => (
-                        <div key={key}>
-                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm break-all">{String(value)}</p>
-                        </div>
-                    ))}
-                </div>
-            );
+            formattedView = <DetailView items={detailsToShow} type="key-value" />;
         }
     }
 
@@ -666,3 +668,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
