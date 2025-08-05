@@ -1,4 +1,3 @@
-@import 'react-vertical-timeline-component/style.min.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -9,26 +8,26 @@ body {
 
 @layer base {
   :root {
-    --background: 248 100% 98%;
+    --background: 240 10% 97%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 256 92% 79%;
-    --primary-foreground: 240 10% 3.9%;
+    --primary: 260 85% 65%;
+    --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 96.1%;
     --secondary-foreground: 0 0% 9%;
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
-    --accent: 217 94% 67%;
+    --accent: 260 85% 65%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 217 94% 67%;
-    --chart-1: 256 92% 79%;
+    --ring: 260 85% 65%;
+    --chart-1: 260 85% 65%;
     --chart-2: 217 94% 67%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
@@ -50,20 +49,20 @@ body {
     --card-foreground: 0 0% 98%;
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    --primary: 256 92% 79%;
-    --primary-foreground: 240 10% 3.9%;
+    --primary: 260 85% 65%;
+    --primary-foreground: 0 0% 98%;
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 217 94% 67%;
+    --accent: 260 85% 65%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
-    --ring: 217 94% 67%;
-    --chart-1: 256 92% 79%;
+    --ring: 260 85% 65%;
+    --chart-1: 260 85% 65%;
     --chart-2: 217 94% 67%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
@@ -89,20 +88,25 @@ body {
 }
 
 .vertical-timeline-element-content {
-  box-shadow: 0 0.25em 0.5em 0 rgba(0, 0, 0, 0.25), 0 0.4em 1.25em 0 rgba(0, 0, 0, 0.15) !important;
+  box-shadow: none !important;
   border-radius: 0.5rem;
-  background: hsl(var(--card));
-  color: hsl(var(--card-foreground));
+  padding: 1.5rem !important;
 }
 
 .vertical-timeline-element-icon {
-    box-shadow: 0 0 0 4px hsl(var(--primary)), inset 0 2px 0 rgba(0, 0, 0, 0.08), 0 3px 0 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 0 0 4px hsl(var(--background)), inset 0 2px 0 rgba(0, 0, 0, 0.08), 0 3px 0 4px rgba(0, 0, 0, 0.05);
 }
 
 .vertical-timeline::before {
-    background: hsl(var(--border));
+    background: hsl(var(--border)) !important;
 }
 
 .vertical-timeline-element-content .vertical-timeline-element-date {
     color: hsl(var(--muted-foreground));
+    font-size: 0.875rem !important;
+    opacity: 1 !important;
+}
+
+.vertical-timeline-element-title {
+    font-family: var(--font-headline);
 }
