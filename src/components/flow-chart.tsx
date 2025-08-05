@@ -63,8 +63,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
   }, [data]);
 
   return (
-    <div>
-        <h2 className="text-xl font-bold font-headline mb-4">Business Process Flow</h2>
+    <div className="mb-8">
         <Card>
             <CardContent className="p-6">
                 <div className="flex items-center justify-between">
