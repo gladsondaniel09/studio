@@ -337,6 +337,7 @@ export default function AuditTimeline() {
   const [selectedAction, setSelectedAction] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -429,6 +430,13 @@ export default function AuditTimeline() {
     setSelectedEntity('all');
     setSelectedAction('all');
     setSortOrder('desc');
+    setSelectedFlowEntities(null);
+  }
+  
+  const handleStageClick = (entities: string[]) => {
+      setSelectedFlowEntities(current => 
+          JSON.stringify(current) === JSON.stringify(entities) ? null : entities
+      );
   }
 
   const entities = useMemo(() => {
@@ -454,8 +462,11 @@ export default function AuditTimeline() {
 
     return data
       .filter(event => {
+        const flowMatch = !selectedFlowEntities || selectedFlowEntities.some(e => event.entity_name.toLowerCase().includes(e));
         const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
         const actionMatch = selectedAction === 'all' || event.action === selectedAction;
+        
+        if (!flowMatch) return false;
         
         if (searchTerm === '') {
           return entityMatch && actionMatch;
@@ -496,13 +507,13 @@ export default function AuditTimeline() {
             return dateB - dateA;
         }
       });
-  }, [data, searchTerm, selectedEntity, selectedAction, sortOrder]);
+  }, [data, searchTerm, selectedEntity, selectedAction, sortOrder, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
     return (
         <div>
-            <FlowChart data={filteredData} />
+            <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8 mt-8">
                  <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-primary"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 7.82566 4.41707 4.33857 7.99933 2.99961M12 2V12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 2C6.47715 2 2 6.47715 2 12C2 16.1743 4.41707 19.6614 7.99933 21.0004" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 4"/></svg>

@@ -6,6 +6,7 @@ import { ShoppingCart, Ship, CheckCircle, Tag, FileText, ChevronRight } from 'lu
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
+import { Button } from './ui/button';
 
 const SampleEventSchema = z.object({
   entity_name: z.string(),
@@ -43,9 +44,11 @@ const flowStages = [
 
 type FlowChartProps = {
   data: AuditEvent[];
+  onStageClick: (entities: string[]) => void;
+  selectedEntities: string[] | null;
 };
 
-export default function FlowChart({ data }: FlowChartProps) {
+export default function FlowChart({ data, onStageClick, selectedEntities }: FlowChartProps) {
   const activeStages = useMemo(() => {
     const active = new Set<string>();
     data.forEach(event => {
@@ -67,12 +70,17 @@ export default function FlowChart({ data }: FlowChartProps) {
                 <div className="flex items-center justify-between">
                 {flowStages.map((stage, index) => (
                     <div key={stage.name} className="flex items-center">
-                    <div
+                    <Button
+                        variant="ghost"
+                        onClick={() => onStageClick(stage.entities)}
                         className={cn(
-                        'flex flex-col items-center text-center gap-2 w-32',
-                        activeStages.has(stage.name)
-                            ? 'text-primary'
-                            : 'text-muted-foreground'
+                            'flex flex-col items-center text-center gap-2 w-32 h-auto p-2 rounded-md',
+                            selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
+                                ? 'bg-primary/20'
+                                : '',
+                            activeStages.has(stage.name)
+                                ? 'text-primary'
+                                : 'text-muted-foreground'
                         )}
                     >
                         <div
@@ -86,7 +94,7 @@ export default function FlowChart({ data }: FlowChartProps) {
                         <stage.icon className="w-6 h-6" />
                         </div>
                         <p className="text-xs font-semibold">{stage.name}</p>
-                    </div>
+                    </Button>
                     {index < flowStages.length - 1 && (
                         <ChevronRight className="w-8 h-8 text-muted-foreground mx-4 hidden sm:block" />
                     )}
