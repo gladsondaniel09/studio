@@ -41,15 +41,19 @@ import { useToast } from '@/hooks/use-toast';
 const SampleEventSchema = z.object({
   created_timestamp: z.string(),
   entity_name: z.string(),
-  action: z.enum(['create', 'update', 'delete']).transform((val) => val.toLowerCase()),
+  action: z.preprocess(
+    (val) => String(val).toLowerCase(),
+    z.enum(['create', 'update', 'delete'])
+  ),
   payload: z.string().optional(),
   difference_list: z.string().optional(),
   user: z.object({
     id: z.string(),
     name: z.string(),
-    email: z.string(),
+    email: z.string().email(),
   }).optional(),
 });
+
 
 type AuditEvent = z.infer<typeof SampleEventSchema>;
 
@@ -589,3 +593,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
