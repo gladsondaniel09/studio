@@ -41,14 +41,14 @@ import { useToast } from '@/hooks/use-toast';
 const SampleEventSchema = z.object({
   created_timestamp: z.string(),
   entity_name: z.string(),
-  action: z.enum(['create', 'update', 'delete']),
+  action: z.enum(['create', 'update', 'delete']).transform((val) => val.toLowerCase()),
   payload: z.string().optional(),
   difference_list: z.string().optional(),
   user: z.object({
     id: z.string(),
     name: z.string(),
-    email: z.string().email(),
-  }),
+    email: z.string(),
+  }).optional(),
 });
 
 type AuditEvent = z.infer<typeof SampleEventSchema>;
@@ -340,8 +340,19 @@ export default function AuditTimeline() {
     setError(null);
     try {
       const demoData = await generateDemoData();
-      setData(demoData.events);
-      setView('timeline');
+      const validatedData = z.array(SampleEventSchema).safeParse(demoData.events);
+      if (validatedData.success) {
+        setData(validatedData.data);
+        setView('timeline');
+      } else {
+        console.error(validatedData.error);
+        setError('AI-generated data does not match the expected format. Please try again.');
+        toast({
+            variant: 'destructive',
+            title: 'Error Parsing Demo Data',
+            description: 'The format of the AI-generated data was invalid.',
+        });
+      }
     } catch (e: any) {
         console.error(e);
         setError('Failed to generate demo data. Please try again.');

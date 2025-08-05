@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview A flow for generating sample audit log data for the demo.
@@ -19,7 +20,7 @@ const SampleEventSchema = z.object({
     id: z.string().describe("The user's ID."),
     name: z.string().describe("The user's name."),
     email: z.string().describe("The user's email."),
-  }).describe('The user who performed the action.'),
+  }).optional().describe('The user who performed the action.'),
 });
 
 const DemoDataOutputSchema = z.object({
@@ -45,7 +46,8 @@ const prompt = ai.definePrompt({
 
   Populate the 'user' object with realistic-looking fake user data.
   Make the 'entity_name' varied, for example 'Trade', 'Counterparty', 'Limit', 'User'.
-  The 'created_timestamp' should be recent and varied.`,
+  The 'created_timestamp' should be recent and varied.
+  The 'action' MUST be one of 'create', 'update', or 'delete' in all lowercase.`,
 });
 
 const generateDemoDataFlow = ai.defineFlow(
