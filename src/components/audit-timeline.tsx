@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import Papa from 'papaparse';
 import {
   VerticalTimeline,
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import { format } from 'date-fns';
-import { AlertTriangle, CheckCircle, File, Lock, User, UserPlus } from 'lucide-react';
+import { AlertTriangle, CheckCircle, File, Lock, Upload, User, UserPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from './ui/input';
 
 interface AuditEvent {
   TimeStamp: string;
@@ -23,7 +26,7 @@ const getIconForEvent = (eventType: string) => {
   if (eventType.toLowerCase().includes('upload') || eventType.toLowerCase().includes('download')) {
     return <File />;
   }
-   if (eventType.toLowerCase().includes('deactivated')) {
+  if (eventType.toLowerCase().includes('deactivated')) {
     return <AlertTriangle />;
   }
   if (eventType.toLowerCase().includes('user')) {
@@ -35,76 +38,115 @@ const getIconForEvent = (eventType: string) => {
 
 export default function AuditTimeline() {
   const [data, setData] = useState<AuditEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch('/audit_log.csv');
-        if (!response.ok) {
-          throw new Error('Failed to fetch audit log: ' + response.statusText);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setLoading(true);
+      setError(null);
+      setData([]);
+      setFileName(file.name);
+
+      Papa.parse<AuditEvent>(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          setData(results.data);
+          setLoading(false);
+        },
+        error: (err: any) => {
+          setError('Failed to parse CSV file: ' + err.message);
+          setLoading(false);
         }
-        const text = await response.text();
-        Papa.parse<AuditEvent>(text, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            setData(results.data);
-            setLoading(false);
-          },
-          error: (err: any) => {
-            setError('Failed to parse CSV file.');
-            setLoading(false);
-          }
-        });
-      } catch (e: any) {
-        setError(e.message);
-        setLoading(false);
-      }
-    };
+      });
+    }
+  };
 
-    fetchData();
-  }, []);
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
 
   if (loading) {
-    return <div className="text-center">Loading audit data...</div>;
+    return <div className="text-center">Parsing CSV file...</div>;
   }
 
-  if (error) {
-    return <div className="text-center text-red-500">Error: {error}</div>;
+  if (data.length === 0) {
+    return (
+        <Card className="max-w-md mx-auto">
+            <CardHeader>
+                <CardTitle className="text-center">Upload Audit Log</CardTitle>
+            </CardHeader>
+            <CardContent className="text-center">
+                 <p className="mb-4 text-muted-foreground">Select a CSV file to visualize the audit timeline.</p>
+                <Input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept=".csv"
+                />
+                <Button onClick={handleUploadClick} disabled={loading}>
+                    <Upload className="mr-2" />
+                    {loading ? 'Uploading...' : 'Upload CSV'}
+                </Button>
+                {fileName && <p className="text-sm text-muted-foreground mt-4">Selected file: {fileName}</p>}
+                {error && <div className="text-center text-red-500 mt-4">Error: {error}</div>}
+            </CardContent>
+        </Card>
+    )
   }
+
 
   return (
-    <VerticalTimeline>
-      {data.map((event, index) => {
-        const { TimeStamp, User, 'Audit Event': auditEvent, ...otherDetails } = event;
-        const eventDate = new Date(TimeStamp);
-        const icon = getIconForEvent(auditEvent);
-        const isSuccess = otherDetails.Status?.toLowerCase() === 'success';
+    <div>
+        <div className="text-center mb-8">
+            <Button onClick={handleUploadClick} variant="outline">
+                <Upload className="mr-2" />
+                Upload another CSV
+            </Button>
+            <Input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".csv"
+            />
+        </div>
+        <VerticalTimeline>
+          {data.map((event, index) => {
+            const { TimeStamp, User, 'Audit Event': auditEvent, ...otherDetails } = event;
+            const eventDate = new Date(TimeStamp);
+            const icon = getIconForEvent(auditEvent);
+            const isSuccess = otherDetails.Status?.toLowerCase() === 'success';
 
-        return (
-          <VerticalTimelineElement
-            key={index}
-            className="vertical-timeline-element--work"
-            contentStyle={{  borderTop: `4px solid ${isSuccess ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'}` }}
-            date={format(eventDate, "PPpp")}
-            iconStyle={{ background: isSuccess ? 'hsl(var(--accent))' : 'hsl(var(--destructive))', color: '#fff' }}
-            icon={icon}
-          >
-            <h3 className="vertical-timeline-element-title text-lg font-bold">{auditEvent}</h3>
-            <h4 className="vertical-timeline-element-subtitle text-muted-foreground">{User}</h4>
-            <div className="mt-4 flex flex-wrap gap-4">
-              {Object.entries(otherDetails).map(([key, value]) => (
-                <div key={key} className="flex-1 min-w-[120px]">
-                  <p className="font-bold text-sm">{key}</p>
-                  <p className="text-sm">{value}</p>
+            return (
+              <VerticalTimelineElement
+                key={index}
+                className="vertical-timeline-element--work"
+                contentStyle={{  borderTop: `4px solid ${isSuccess ? 'hsl(var(--accent))' : 'hsl(var(--destructive))'}` }}
+                date={format(eventDate, "PPpp")}
+                iconStyle={{ background: isSuccess ? 'hsl(var(--accent))' : 'hsl(var(--destructive))', color: '#fff' }}
+                icon={icon}
+              >
+                <h3 className="vertical-timeline-element-title text-lg font-bold">{auditEvent}</h3>
+                <h4 className="vertical-timeline-element-subtitle text-muted-foreground">{User}</h4>
+                <div className="mt-4 flex flex-wrap gap-4">
+                  {Object.entries(otherDetails).map(([key, value]) => (
+                    <div key={key} className="flex-1 min-w-[120px]">
+                      <p className="font-bold text-sm">{key}</p>
+                      <p className="text-sm">{value}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </VerticalTimelineElement>
-        );
-      })}
-    </VerticalTimeline>
+              </VerticalTimelineElement>
+            );
+          })}
+        </VerticalTimeline>
+    </div>
   );
 }
