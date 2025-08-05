@@ -9,7 +9,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -56,6 +56,67 @@ const SampleEventSchema = z.object({
 
 
 type AuditEvent = z.infer<typeof SampleEventSchema>;
+
+const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, title: string }) => {
+    const { toast } = useToast();
+    const [searchTerm, setSearchTerm] = useState('');
+
+    if (!jsonString) return null;
+
+    let parsedJson;
+    try {
+        parsedJson = JSON.parse(jsonString);
+    } catch (e) {
+        parsedJson = jsonString;
+    }
+    const formattedJson = JSON.stringify(parsedJson, null, 2);
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(formattedJson);
+        toast({ title: 'Success', description: 'Raw JSON copied to clipboard.' });
+    };
+
+    const highlightedJson = useMemo(() => {
+        if (!searchTerm) return formattedJson;
+        const parts = formattedJson.split(new RegExp(`(${searchTerm})`, 'gi'));
+        return (
+            <span>
+                {parts.map((part, i) =>
+                    part.toLowerCase() === searchTerm.toLowerCase() ? (
+                        <mark key={i} className="bg-primary/20 text-primary-foreground p-0 rounded">
+                            {part}
+                        </mark>
+                    ) : (
+                        part
+                    )
+                )}
+            </span>
+        );
+    }, [searchTerm, formattedJson]);
+    
+    return (
+        <div className="space-y-2">
+            <h4 className="font-semibold">{title}</h4>
+            <div className="flex gap-2">
+                <div className="relative w-full">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search in JSON..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 h-9"
+                    />
+                </div>
+                <Button variant="outline" size="icon" onClick={handleCopy} className='shrink-0'>
+                    <Copy className="h-4 w-4" />
+                </Button>
+            </div>
+            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
+                <pre className="text-xs">{highlightedJson}</pre>
+            </div>
+        </div>
+    );
+};
 
 
 const getIconForEvent = (eventType: string) => {
@@ -182,7 +243,7 @@ const renderDetails = (event: AuditEvent) => {
             <div className="space-y-4">
                 {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
                 
-                {(rawPayload || rawDiffList) && (
+                {(payload || difference_list) && (
                     <Accordion type="single" collapsible className="w-full pt-4">
                         <AccordionItem value="item-1">
                             <AccordionTrigger>
@@ -192,22 +253,8 @@ const renderDetails = (event: AuditEvent) => {
                             </AccordionTrigger>
                             <AccordionContent>
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    {rawDiffList && (
-                                        <div className="space-y-2">
-                                            <h4 className="font-semibold">difference_list (JSON)</h4>
-                                            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
-                                                <pre className="text-xs">{JSON.stringify(rawDiffList, null, 2)}</pre>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {rawPayload && (
-                                        <div className="space-y-2">
-                                            <h4 className="font-semibold">payload (JSON)</h4>
-                                            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
-                                                <pre className="text-xs">{JSON.stringify(rawPayload, null, 2)}</pre>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <RawJsonViewer jsonString={difference_list} title="difference_list (JSON)" />
+                                    <RawJsonViewer jsonString={payload} title="payload (JSON)" />
                                 </div>
                             </AccordionContent>
                         </AccordionItem>
