@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { ScrollArea } from './ui/scroll-area';
 
 interface AuditEvent {
   created_timestamp: string;
@@ -50,48 +51,84 @@ const getIconForEvent = (eventType: string) => {
 const renderDetails = (event: AuditEvent) => {
     const { action, payload, difference_list } = event;
     const lowerCaseAction = action.toLowerCase();
-
+    
+    // For 'create' or 'insert' events
     if (lowerCaseAction.includes('create') && payload) {
         try {
             const parsedPayload = JSON.parse(payload);
-            return (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
-                    {Object.entries(parsedPayload).map(([key, value]) => (
-                        <div key={key}>
-                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm">{String(value)}</p>
+            const specificFields = [
+                'physicalContractId', 'provisionalPrice', 'provisionalPriceUom', 
+                'priceStatus', 'priceLots', 'pricedQuantity', 'balanceQuantity'
+            ];
+            const entries = Object.entries(parsedPayload).filter(([key]) => specificFields.includes(key));
+            
+            if (entries.length > 0) {
+                return (
+                    <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                            {entries.map(([key, value]) => (
+                                <div key={key}>
+                                    <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                                    <p className="text-sm">{String(value)}</p>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
-            );
+                    </ScrollArea>
+                );
+            }
+            return <p className="text-sm mt-4">{payload}</p>;
         } catch (e) {
             return <p className="text-sm mt-4">{payload}</p>;
         }
     }
 
-    if ((lowerCaseAction.includes('update') || lowerCaseAction.includes('delete')) && difference_list) {
+    // For 'update' events
+    if ((lowerCaseAction.includes('update')) && difference_list) {
         try {
             const differences = JSON.parse(difference_list);
             return (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
-                    {differences.map((diff: any, index: number) => (
-                        <div key={index}>
-                            <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
-                            <div className="flex items-center gap-2 text-sm">
-                                <span className="text-muted-foreground">{diff.oldValue ?? 'none'}</span>
-                                <ArrowRight className="w-4 h-4 text-primary" />
-                                <span>{diff.newValue ?? 'none'}</span>
+                 <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                        {differences.map((diff: any, index: number) => (
+                            <div key={index}>
+                                <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <span className="text-muted-foreground">{diff.oldValue ?? 'none'}</span>
+                                    <ArrowRight className="w-4 h-4 text-primary" />
+                                    <span>{diff.newValue ?? 'none'}</span>
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                 </ScrollArea>
             );
         } catch (e) {
              return <p className="text-sm mt-4">{difference_list}</p>;
         }
     }
 
-    // Fallback for other details if payload/difference_list is not the primary content
+    // For 'delete' events
+    if (lowerCaseAction.includes('delete') && payload) {
+         try {
+            const parsedPayload = JSON.parse(payload);
+            return (
+                <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                        {Object.entries(parsedPayload).map(([key, value]) => (
+                            <div key={key}>
+                                <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                                <p className="text-sm">{String(value)}</p>
+                            </div>
+                        ))}
+                    </div>
+                </ScrollArea>
+            );
+        } catch (e) {
+            return <p className="text-sm mt-4">{payload}</p>;
+        }
+    }
+
+    // Fallback for other details
     const { created_timestamp, entity_name, action: evtAction, ...otherDetails } = event;
     const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
@@ -101,7 +138,7 @@ const renderDetails = (event: AuditEvent) => {
                 {detailsToShow.map(([key, value]) => (
                     <div key={key}>
                         <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                        <p className="text-sm">{value}</p>
+                        <p className="text-sm">{String(value)}</p>
                     </div>
                 ))}
             </div>
