@@ -146,6 +146,27 @@ const getIconForEvent = (eventType: string) => {
   return <File />;
 };
 
+const TruncatedValue = ({ value }: { value: any }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+    const text = String(value ?? 'none');
+    const TRUNCATE_LENGTH = 100;
+
+    if (text.length <= TRUNCATE_LENGTH) {
+        return <p className="text-sm break-words">{text}</p>;
+    }
+
+    return (
+        <div>
+            <p className="text-sm break-words">
+                {isExpanded ? text : `${text.substring(0, TRUNCATE_LENGTH)}...`}
+            </p>
+            <Button variant="link" size="sm" onClick={() => setIsExpanded(!isExpanded)} className="p-0 h-auto text-xs">
+                {isExpanded ? 'Show Less' : 'Show More'}
+            </Button>
+        </div>
+    );
+};
+
 const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => {
     const [showAll, setShowAll] = useState(false);
     const limit = 4;
@@ -161,10 +182,10 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                              <div key={index} className="min-w-0">
                                 <p className="font-bold text-sm capitalize">{(item.label || item.field).replace(/_/g, ' ')}</p>
                                 <div className="flex flex-col text-sm">
-                                    <span className="text-muted-foreground break-words line-through">{String(item.oldValue ?? 'none')}</span>
-                                    <div className="flex items-center gap-2">
-                                        <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                        <span className='break-words'>{String(item.newValue ?? 'none')}</span>
+                                    <div className="text-muted-foreground line-through"><TruncatedValue value={item.oldValue} /></div>
+                                    <div className="flex items-start gap-2">
+                                        <ArrowRight className="w-4 h-4 text-primary shrink-0 mt-1" />
+                                        <div className='flex-1'><TruncatedValue value={item.newValue} /></div>
                                     </div>
                                 </div>
                             </div>
@@ -174,7 +195,7 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                      return (
                         <div key={key} className="min-w-0">
                             <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm break-words">{String(value)}</p>
+                            <TruncatedValue value={value} />
                         </div>
                     )
                 })}
@@ -670,3 +691,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
