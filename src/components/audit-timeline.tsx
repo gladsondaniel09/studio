@@ -185,7 +185,7 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                                     <div className="text-muted-foreground line-through"><TruncatedValue value={item.oldValue} /></div>
                                     <div className="flex items-start gap-2">
                                         <ArrowRight className="w-4 h-4 text-primary shrink-0 mt-1" />
-                                        <div className='flex-1'><TruncatedValue value={item.newValue} /></div>
+                                        <div className='flex-1 min-w-0'><TruncatedValue value={item.newValue} /></div>
                                     </div>
                                 </div>
                             </div>
@@ -195,7 +195,7 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                      return (
                         <div key={key} className="min-w-0">
                             <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <TruncatedValue value={value} />
+                            <div className="min-w-0"><TruncatedValue value={value} /></div>
                         </div>
                     )
                 })}
