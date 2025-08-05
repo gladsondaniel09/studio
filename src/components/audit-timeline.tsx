@@ -9,7 +9,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -34,15 +34,25 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion"
+import { generateDemoData } from '@/ai/flows/demo-data-flow';
+import { z } from 'zod';
+import { useToast } from '@/hooks/use-toast';
 
-interface AuditEvent {
-  created_timestamp: string;
-  entity_name: string;
-  action: string;
-  payload?: string;
-  difference_list?: string;
-  [key: string]: any;
-}
+const SampleEventSchema = z.object({
+  created_timestamp: z.string(),
+  entity_name: z.string(),
+  action: z.enum(['create', 'update', 'delete']),
+  payload: z.string().optional(),
+  difference_list: z.string().optional(),
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+  }),
+});
+
+type AuditEvent = z.infer<typeof SampleEventSchema>;
+
 
 const getIconForEvent = (eventType: string) => {
   if (typeof eventType !== 'string') {
@@ -273,6 +283,8 @@ export default function AuditTimeline() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntity, setSelectedEntity] = useState('all');
   const [selectedAction, setSelectedAction] = useState('all');
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
+  const { toast } = useToast();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -299,13 +311,20 @@ export default function AuditTimeline() {
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
-              const parsedData = results.data as AuditEvent[];
+              const parsedData = results.data as any[];
               const validData = parsedData.filter(row => row.created_timestamp && row.action);
               if (validData.length === 0) {
                   setError('CSV file is empty, invalid, or does not contain required "created_timestamp" and "action" columns.');
                   setView('upload');
               } else {
-                  setData(validData);
+                  const validatedData = z.array(SampleEventSchema).safeParse(validData);
+                  if (validatedData.success) {
+                    setData(validatedData.data);
+                  } else {
+                    console.error(validatedData.error);
+                    setError('CSV data does not match the expected format.');
+                    setData(validData as AuditEvent[]); // Fallback to raw data for display
+                  }
                   setView('timeline');
               }
           },
@@ -315,6 +334,26 @@ export default function AuditTimeline() {
           }
       });
   };
+
+  const handleDemo = async () => {
+    setIsDemoLoading(true);
+    setError(null);
+    try {
+      const demoData = await generateDemoData();
+      setData(demoData.events);
+      setView('timeline');
+    } catch (e: any) {
+        console.error(e);
+        setError('Failed to generate demo data. Please try again.');
+        toast({
+            variant: 'destructive',
+            title: 'Error Generating Demo',
+            description: e.message || 'An unexpected error occurred.',
+        });
+    } finally {
+        setIsDemoLoading(false);
+    }
+  }
 
   const handleUploadNew = () => {
     setView('upload');
@@ -341,7 +380,7 @@ export default function AuditTimeline() {
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     const deepSearch = (obj: any): boolean => {
-      if (!obj) return false;
+      if (obj === null || obj === undefined) return false;
       if (typeof obj !== 'object') {
         return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
       }
@@ -356,9 +395,12 @@ export default function AuditTimeline() {
         return entityMatch && actionMatch;
       }
 
-      let searchMatch = Object.values(event).some(value =>
-        String(value).toLowerCase().includes(lowerCaseSearchTerm)
-      );
+      // Create a copy of the event to search, without the original payload/diff list to avoid double searching
+      const eventToSearch: any = { ...event };
+      delete eventToSearch.payload;
+      delete eventToSearch.difference_list;
+      
+      let searchMatch = deepSearch(eventToSearch);
 
       if (!searchMatch) {
           try {
@@ -371,7 +413,9 @@ export default function AuditTimeline() {
                   searchMatch = deepSearch(parsedDiff);
               }
           } catch(e) {
-              // Ignore parsing errors during search
+              // Fallback to searching the raw string if JSON parsing fails
+              if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
+              if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
           }
       }
 
@@ -491,27 +535,44 @@ export default function AuditTimeline() {
           <CardTitle className="text-2xl font-headline">Upload Audit Log</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-6 p-8">
-            <label htmlFor="csv-upload" className="w-full">
-                <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted transition-colors">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
-                        <p className="mb-2 text-sm text-muted-foreground">
-                            <span className="font-semibold text-primary">Click to upload</span> or drag and drop
-                        </p>
-                        <p className="text-xs text-muted-foreground">CSV file</p>
+            <div className="flex flex-col items-center justify-center w-full">
+                <label htmlFor="csv-upload" className="w-full">
+                    <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
+                            <p className="mb-2 text-sm text-muted-foreground">
+                                <span className="font-semibold text-primary">Click to upload</span> or drag and drop
+                            </p>
+                            <p className="text-xs text-muted-foreground">CSV file</p>
+                        </div>
+                        <input id="csv-upload" type="file" className="hidden" accept=".csv" onChange={handleFileChange} />
                     </div>
-                    <input id="csv-upload" type="file" className="hidden" accept=".csv" onChange={handleFileChange} />
-                </div>
-            </label>
+                </label>
 
-            {fileName && <p className="text-sm font-medium">Selected file: {fileName}</p>}
+                {fileName && <p className="text-sm font-medium mt-4">Selected file: {fileName}</p>}
+                
+                <Button onClick={handleViewTimeline} disabled={!file || !!error} className="w-full mt-4">
+                    <Eye className="mr-2"/>
+                    View Timeline
+                </Button>
+            </div>
+            
+            <div className="w-full flex items-center gap-2">
+                <hr className="w-full border-border"/>
+                <span className="text-xs text-muted-foreground">OR</span>
+                <hr className="w-full border-border"/>
+            </div>
+
+            <Button onClick={handleDemo} disabled={isDemoLoading} className="w-full">
+                {isDemoLoading ? (
+                    <Loader className="mr-2 animate-spin" />
+                ) : (
+                    <Sparkles className="mr-2" />
+                )}
+                View Demo
+            </Button>
             
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
-            
-            <Button onClick={handleViewTimeline} disabled={!file || !!error} className="w-full">
-                <Eye className="mr-2"/>
-                View Timeline
-            </Button>
         </CardContent>
       </Card>
     </div>
