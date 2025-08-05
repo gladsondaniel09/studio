@@ -364,18 +364,29 @@ export default function AuditTimeline() {
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
-  const [showWalkthrough, setShowWalkthrough] = useState(false);
+  const [showUploadWalkthrough, setShowUploadWalkthrough] = useState(false);
+  const [showTimelineWalkthrough, setShowTimelineWalkthrough] = useState(false);
 
   useEffect(() => {
-    // Show walkthrough on initial load if no data is present
-    const hasSeenWalkthrough = localStorage.getItem('hasSeenWalkthrough');
-    if (!hasSeenWalkthrough) {
-        setShowWalkthrough(true);
-        localStorage.setItem('hasSeenWalkthrough', 'true');
+    // Show upload walkthrough on initial load
+    const hasSeenUpload = localStorage.getItem('hasSeenUploadWalkthrough');
+    if (!hasSeenUpload) {
+        setShowUploadWalkthrough(true);
+        localStorage.setItem('hasSeenUploadWalkthrough', 'true');
     }
   }, []);
 
-  const walkthroughSteps: Step[] = [
+  useEffect(() => {
+    if (view === 'timeline') {
+      const hasSeenTimeline = localStorage.getItem('hasSeenTimelineWalkthrough');
+      if (!hasSeenTimeline) {
+        setShowTimelineWalkthrough(true);
+        localStorage.setItem('hasSeenTimelineWalkthrough', 'true');
+      }
+    }
+  }, [view]);
+
+  const uploadWalkthroughSteps: Step[] = [
     {
       element: '#upload-card',
       title: 'Upload Your Data',
@@ -387,6 +398,33 @@ export default function AuditTimeline() {
       content: 'Don\'t have a file? Click here to generate some sample data and see how the timeline works.',
     },
   ];
+
+  const timelineWalkthroughSteps: Step[] = [
+    {
+      element: '#flow-chart-card',
+      title: 'Business Process Flow',
+      content: 'This chart shows the stages of your process. It highlights stages that are present in your data. Click a stage to filter the timeline below.',
+      placement: 'bottom',
+    },
+    {
+        element: '#search-bar',
+        title: 'Search Logs',
+        content: 'You can perform a deep search on all event details, including the raw JSON payloads.',
+        placement: 'bottom',
+    },
+    {
+        element: '#filter-controls',
+        title: 'Filter & Sort',
+        content: 'Refine the timeline by filtering on specific actions or entities, and sort the events by date.',
+        placement: 'bottom',
+    },
+    {
+        element: '#timeline-event-card',
+        title: 'Timeline Events',
+        content: 'Each card represents an audit event. You can see a quick preview of the changes here. For full details, click the expand icon.',
+        placement: 'right',
+    },
+  ]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -561,8 +599,15 @@ export default function AuditTimeline() {
   if (view === 'timeline') {
     return (
       <div className='flex flex-col'>
+          <Walkthrough
+            steps={timelineWalkthroughSteps}
+            isOpen={showTimelineWalkthrough}
+            onClose={() => setShowTimelineWalkthrough(false)}
+          />
           <header className="flex-none flex justify-between items-start mb-8">
-              <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+              <div className="w-full" id="flow-chart-card">
+                  <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+              </div>
               <div className="flex-shrink-0 ml-4">
                   <ThemeToggle />
               </div>
@@ -574,7 +619,7 @@ export default function AuditTimeline() {
                   Audit Log Timeline
               </h1>
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-                  <div className="relative w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto" id="search-bar">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input 
                           placeholder="Search logs..."
@@ -583,34 +628,36 @@ export default function AuditTimeline() {
                           className="pl-10 w-full sm:w-64"
                       />
                   </div>
-                  <Select value={selectedAction} onValueChange={setSelectedAction}>
-                      <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue placeholder="Filter by action" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          {actions.map(action => (
-                              <SelectItem key={action} value={action}>
-                                  {action === 'all' ? 'All Actions' : action}
-                              </SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
-                      <SelectTrigger className="w-full sm:w-[180px]">
-                          <SelectValue placeholder="Filter by entity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          {entities.map(entity => (
-                              <SelectItem key={entity} value={entity}>
-                                  {entity === 'all' ? 'All Entities' : entity}
-                              </SelectItem>
-                          ))}
-                      </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
-                      {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
-                      Sort {sortOrder === 'desc' ? 'Descending' : 'Ascending'}
-                  </Button>
+                  <div id="filter-controls" className="contents sm:flex sm:flex-row sm:items-center sm:gap-4 w-full sm:w-auto">
+                    <Select value={selectedAction} onValueChange={setSelectedAction}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="Filter by action" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {actions.map(action => (
+                                <SelectItem key={action} value={action}>
+                                    {action === 'all' ? 'All Actions' : action}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="Filter by entity" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {entities.map(entity => (
+                                <SelectItem key={entity} value={entity}>
+                                    {entity === 'all' ? 'All Entities' : entity}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
+                        {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                        Sort {sortOrder === 'desc' ? 'Descending' : 'Ascending'}
+                    </Button>
+                  </div>
                   <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
               </div>
           </div>
@@ -627,6 +674,7 @@ export default function AuditTimeline() {
                 return (
                 <VerticalTimelineElement
                     key={index}
+                    id={index === 0 ? 'timeline-event-card' : undefined}
                     className="vertical-timeline-element--work"
                     contentStyle={{ 
                         background: 'hsl(var(--card))', 
@@ -642,7 +690,7 @@ export default function AuditTimeline() {
                     iconStyle={{ 
                         background: 'hsl(var(--primary))', 
                         color: 'hsl(var(--primary-foreground))',
-                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 6px hsl(var(--primary))'
+                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 8px hsl(var(--primary))'
                     }}
                     icon={icon}
                 >
@@ -678,12 +726,12 @@ export default function AuditTimeline() {
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-[80vh]">
         <Walkthrough
-            steps={walkthroughSteps}
-            isOpen={showWalkthrough}
-            onClose={() => setShowWalkthrough(false)}
+            steps={uploadWalkthroughSteps}
+            isOpen={showUploadWalkthrough}
+            onClose={() => setShowUploadWalkthrough(false)}
         />
         <div className="w-full max-w-lg text-right mb-4 flex justify-end items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setShowWalkthrough(true)}>
+            <Button variant="ghost" size="icon" onClick={() => setShowUploadWalkthrough(true)}>
                 <HelpCircle className="w-5 h-5" />
             </Button>
             <ThemeToggle />
