@@ -160,10 +160,12 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                         return (
                              <div key={index} className="min-w-0">
                                 <p className="font-bold text-sm capitalize">{(item.label || item.field).replace(/_/g, ' ')}</p>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground break-words">{String(item.oldValue ?? 'none')}</span>
-                                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                    <span className='break-words'>{String(item.newValue ?? 'none')}</span>
+                                <div className="flex flex-col text-sm">
+                                    <span className="text-muted-foreground break-words line-through">{String(item.oldValue ?? 'none')}</span>
+                                    <div className="flex items-center gap-2">
+                                        <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                                        <span className='break-words'>{String(item.newValue ?? 'none')}</span>
+                                    </div>
                                 </div>
                             </div>
                         )
