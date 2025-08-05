@@ -8,7 +8,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 
@@ -48,30 +48,67 @@ const getIconForEvent = (eventType: string) => {
 };
 
 const renderDetails = (event: AuditEvent) => {
-  const { action, payload, difference_list, created_timestamp, entity_name, ...otherDetails } = event;
-  const lowerCaseEvent = action.toLowerCase();
+    const { action, payload, difference_list } = event;
+    const lowerCaseAction = action.toLowerCase();
 
-  if (lowerCaseEvent.includes('create') && payload) {
-    return <p className="text-sm">{payload}</p>;
-  }
+    if (lowerCaseAction.includes('create') && payload) {
+        try {
+            const parsedPayload = JSON.parse(payload);
+            return (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                    {Object.entries(parsedPayload).map(([key, value]) => (
+                        <div key={key}>
+                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm">{String(value)}</p>
+                        </div>
+                    ))}
+                </div>
+            );
+        } catch (e) {
+            return <p className="text-sm mt-4">{payload}</p>;
+        }
+    }
 
-  if ((lowerCaseEvent.includes('update') || lowerCaseEvent.includes('delete')) && difference_list) {
-    return <p className="text-sm">{difference_list}</p>;
-  }
+    if ((lowerCaseAction.includes('update') || lowerCaseAction.includes('delete')) && difference_list) {
+        try {
+            const differences = JSON.parse(difference_list);
+            return (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                    {differences.map((diff: any, index: number) => (
+                        <div key={index}>
+                            <p className="font-bold text-sm capitalize">{diff.field.replace(/_/g, ' ')}</p>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground">{diff.old_value || 'none'}</span>
+                                <ArrowRight className="w-4 h-4 text-primary" />
+                                <span>{diff.new_value || 'none'}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        } catch (e) {
+             return <p className="text-sm mt-4">{difference_list}</p>;
+        }
+    }
 
-  return (
-    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
-      {Object.entries(otherDetails).map(([key, value]) => {
-        if (!value || value === 'NULL') return null;
+    // Fallback for other details if payload/difference_list is not the primary content
+    const { created_timestamp, entity_name, action: evtAction, ...otherDetails } = event;
+    const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
+
+    if (detailsToShow.length > 0) {
         return (
-          <div key={key}>
-            <p className="font-bold text-sm">{key}</p>
-            <p className="text-sm">{value}</p>
-          </div>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
+                {detailsToShow.map(([key, value]) => (
+                    <div key={key}>
+                        <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                        <p className="text-sm">{value}</p>
+                    </div>
+                ))}
+            </div>
         );
-      })}
-    </div>
-  );
+    }
+    
+    return null;
 }
 
 
@@ -84,12 +121,12 @@ export default function AuditTimeline() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
+    setFileName(null);
+    setFile(null);
     const targetFile = e.target.files?.[0];
     if (targetFile) {
         if (targetFile.type !== 'text/csv') {
             setError('Please upload a valid CSV file.');
-            setFile(null);
-            setFileName(null);
         } else {
             setFile(targetFile);
             setFileName(targetFile.name);
