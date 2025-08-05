@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ShoppingCart, Ship, CheckCircle, Tag, FileText, ChevronRight } from 'lucide-react';
+import { ShoppingCart, Ship, CheckCircle, Tag, FileText, ChevronRight, DollarSign } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ const flowStages = [
   {
     name: 'Physical Purchase Trade',
     icon: ShoppingCart,
-    entities: ['trade'],
+    entities: ['trade', 'plannedobligation'],
     dynamic_label: true,
   },
   {
@@ -35,6 +35,11 @@ const flowStages = [
     name: 'Pricing',
     icon: Tag,
     entities: ['pricing', 'price'],
+  },
+  {
+    name: 'Cost',
+    icon: DollarSign,
+    entities: ['cost'],
   },
   {
     name: 'Commercial Invoice',
