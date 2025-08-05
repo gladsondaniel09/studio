@@ -228,6 +228,7 @@ export default function AuditTimeline() {
   const [file, setFile] = useState<File | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntity, setSelectedEntity] = useState('all');
+  const [selectedAction, setSelectedAction] = useState('all');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -279,6 +280,7 @@ export default function AuditTimeline() {
     setError(null);
     setSearchTerm('');
     setSelectedEntity('all');
+    setSelectedAction('all');
   }
 
   const entities = useMemo(() => {
@@ -286,16 +288,53 @@ export default function AuditTimeline() {
     return ['all', ...uniqueEntities];
   }, [data]);
 
+  const actions = useMemo(() => {
+    const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
+    return ['all', ...uniqueActions];
+  }, [data]);
+
   const filteredData = useMemo(() => {
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+    const deepSearch = (obj: any): boolean => {
+      if (!obj) return false;
+      if (typeof obj !== 'object') {
+        return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
+      }
+      return Object.values(obj).some(value => deepSearch(value));
+    };
+
     return data.filter(event => {
-        const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
-        const searchMatch = searchTerm === '' || 
-            Object.values(event).some(value => 
-                String(value).toLowerCase().includes(searchTerm.toLowerCase())
-            );
-        return entityMatch && searchMatch;
+      const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
+      const actionMatch = selectedAction === 'all' || event.action === selectedAction;
+      
+      if (searchTerm === '') {
+        return entityMatch && actionMatch;
+      }
+
+      let searchMatch = Object.values(event).some(value =>
+        String(value).toLowerCase().includes(lowerCaseSearchTerm)
+      );
+
+      if (!searchMatch) {
+          try {
+              if (event.payload) {
+                  const parsedPayload = JSON.parse(event.payload);
+                  searchMatch = deepSearch(parsedPayload);
+              }
+              if (!searchMatch && event.difference_list) {
+                  const parsedDiff = JSON.parse(event.difference_list);
+                  searchMatch = deepSearch(parsedDiff);
+              }
+          } catch(e) {
+              // Ignore parsing errors during search
+          }
+      }
+
+      return entityMatch && actionMatch && searchMatch;
     });
-  }, [data, searchTerm, selectedEntity]);
+  }, [data, searchTerm, selectedEntity, selectedAction]);
+
 
   if (view === 'timeline') {
     return (
@@ -315,6 +354,18 @@ export default function AuditTimeline() {
                             className="pl-10 w-full sm:w-64"
                         />
                     </div>
+                    <Select value={selectedAction} onValueChange={setSelectedAction}>
+                        <SelectTrigger className="w-full sm:w-[180px]">
+                            <SelectValue placeholder="Filter by action" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {actions.map(action => (
+                                <SelectItem key={action} value={action}>
+                                    {action === 'all' ? 'All Actions' : action}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                     <Select value={selectedEntity} onValueChange={setSelectedEntity}>
                         <SelectTrigger className="w-full sm:w-[180px]">
                             <SelectValue placeholder="Filter by entity" />
