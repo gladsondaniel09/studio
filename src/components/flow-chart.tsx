@@ -85,7 +85,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         variant="ghost"
                         onClick={() => onStageClick(stage.entities)}
                         className={cn(
-                            'flex flex-col items-center text-center gap-2 w-full h-auto p-2 rounded-md transition-all',
+                            'flex flex-col items-center text-center text-foreground gap-2 w-full h-auto p-2 rounded-md transition-all',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20 border-primary border'
                                 : '',
@@ -98,7 +98,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         className={cn(
                             'flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all',
                             activeStages.has(stage.name)
-                            ? 'bg-primary/10 border-primary'
+                            ? 'bg-primary/10 border-primary text-primary'
                             : 'bg-muted border-border',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20'
@@ -107,7 +107,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         >
                         <stage.icon className="w-6 h-6" />
                         </div>
-                        <p className="text-xs font-bold font-headline">{stage.dynamic_label ? tradeStageName : stage.name}</p>
+                        <p className="text-xs font-bold font-headline text-foreground">{stage.dynamic_label ? tradeStageName : stage.name}</p>
                     </Button>
                     {index < flowStages.length - 1 && (
                         <ChevronRight className="w-8 h-8 text-muted-foreground/50 mx-2 hidden sm:block" />
