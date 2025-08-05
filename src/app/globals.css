@@ -1,3 +1,4 @@
+@import 'react-vertical-timeline-component/style.min.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -85,4 +86,23 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.vertical-timeline-element-content {
+  box-shadow: 0 0.25em 0.5em 0 rgba(0, 0, 0, 0.25), 0 0.4em 1.25em 0 rgba(0, 0, 0, 0.15) !important;
+  border-radius: 0.5rem;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+}
+
+.vertical-timeline-element-icon {
+    box-shadow: 0 0 0 4px hsl(var(--primary)), inset 0 2px 0 rgba(0, 0, 0, 0.08), 0 3px 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.vertical-timeline::before {
+    background: hsl(var(--border));
+}
+
+.vertical-timeline-element-content .vertical-timeline-element-date {
+    color: hsl(var(--muted-foreground));
 }

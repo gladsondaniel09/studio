@@ -1,0 +1,9 @@
+TimeStamp,User,Audit Event,IP Address,Status,Details
+2024-07-30T10:00:00Z,alice@example.com,User Login,192.168.1.1,Success,User successfully logged in.
+2024-07-30T10:05:21Z,bob@example.com,File Upload,192.168.1.5,Success,Uploaded 'report.docx'.
+2024-07-30T10:15:00Z,admin@example.com,Settings Change,10.0.0.1,Success,Updated user roles.
+2024-07-30T11:30:00Z,charlie@example.com,User Login,192.168.2.10,Failed,Invalid password attempt.
+2024-07-30T12:00:00Z,alice@example.com,File Download,192.168.1.1,Success,Downloaded 'presentation.pptx'.
+2024-07-30T13:45:00Z,dave@example.com,API Key Generated,203.0.113.1,Success,New API key created for integration.
+2024-07-30T14:20:00Z,admin@example.com,User Deactivated,10.0.0.1,Success,Deactivated user 'charlie@example.com'.
+2024-07-30T15:00:00Z,bob@example.com,User Logout,192.168.1.5,Success,User successfully logged out.
