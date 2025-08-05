@@ -158,21 +158,21 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
                 {visibleItems.map((item: any, index: number) => {
                     if(type === 'diff') {
                         return (
-                             <div key={index}>
+                             <div key={index} className="min-w-0">
                                 <p className="font-bold text-sm capitalize">{(item.label || item.field).replace(/_/g, ' ')}</p>
                                 <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground break-all">{String(item.oldValue ?? 'none')}</span>
+                                    <span className="text-muted-foreground break-words">{String(item.oldValue ?? 'none')}</span>
                                     <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                    <span className='break-all'>{String(item.newValue ?? 'none')}</span>
+                                    <span className='break-words'>{String(item.newValue ?? 'none')}</span>
                                 </div>
                             </div>
                         )
                     }
                     const [key, value] = item;
                      return (
-                        <div key={key}>
+                        <div key={key} className="min-w-0">
                             <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <p className="text-sm break-all">{String(value)}</p>
+                            <p className="text-sm break-words">{String(value)}</p>
                         </div>
                     )
                 })}
@@ -503,7 +503,7 @@ export default function AuditTimeline() {
         if (sortOrder === 'asc') {
             return dateA - dateB;
         } else {
-            return dateB - a.created_timestamp;
+            return dateB - dateA;
         }
       });
   }, [data, searchTerm, selectedEntity, selectedAction, sortOrder, selectedFlowEntities]);
