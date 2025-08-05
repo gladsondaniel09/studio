@@ -105,9 +105,9 @@ const renderDetails = (event: AuditEvent) => {
                             <div key={index}>
                                 <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
                                 <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground break-all">{diff.oldValue ?? 'none'}</span>
+                                    <span className="text-muted-foreground break-all">{String(diff.oldValue ?? 'none')}</span>
                                     <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                    <span className='break-all'>{diff.newValue ?? 'none'}</span>
+                                    <span className='break-all'>{String(diff.newValue ?? 'none')}</span>
                                 </div>
                             </div>
                         ))}
@@ -194,9 +194,9 @@ const renderPreview = (event: AuditEvent) => {
                         {differences.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
                              <p key={index} className="truncate">
                                 <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
-                                <span className="text-muted-foreground line-through">{diff.oldValue ?? 'none'}</span>
+                                <span className="text-muted-foreground line-through">{String(diff.oldValue ?? 'none')}</span>
                                 <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
-                                <span className='text-foreground'>{diff.newValue ?? 'none'}</span>
+                                <span className='text-foreground'>{String(diff.newValue ?? 'none')}</span>
                             </p>
                         ))}
                         {differences.length > PREVIEW_LIMIT && (
