@@ -503,7 +503,7 @@ export default function AuditTimeline() {
         if (sortOrder === 'asc') {
             return dateA - dateB;
         } else {
-            return dateB - dateA;
+            return dateB - a.created_timestamp;
         }
       });
   }, [data, searchTerm, selectedEntity, selectedAction, sortOrder, selectedFlowEntities]);
@@ -668,5 +668,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
