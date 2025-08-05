@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo } from 'react';
@@ -157,6 +158,65 @@ const renderDetails = (event: AuditEvent) => {
     }
     
     return null;
+}
+
+const renderPreview = (event: AuditEvent) => {
+    const { action, payload, difference_list } = event;
+    const lowerCaseAction = action.toLowerCase();
+    const PREVIEW_LIMIT = 2;
+
+    try {
+        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && payload) {
+            const parsedPayload = JSON.parse(payload);
+            const entries = Object.entries(parsedPayload);
+            if (entries.length > 0) {
+                return (
+                    <div className="text-xs mt-2 space-y-1 text-left">
+                        {entries.slice(0, PREVIEW_LIMIT).map(([key, value]) => (
+                             <p key={key} className="truncate">
+                                <span className="font-semibold capitalize">{key.replace(/_/g, ' ')}: </span>
+                                <span className="text-muted-foreground">{String(value)}</span>
+                            </p>
+                        ))}
+                        {entries.length > PREVIEW_LIMIT && (
+                            <p className="text-muted-foreground">...and {entries.length - PREVIEW_LIMIT} more fields.</p>
+                        )}
+                    </div>
+                );
+            }
+        }
+
+        if (lowerCaseAction.includes('update') && difference_list) {
+            const differences = JSON.parse(difference_list);
+            if (differences.length > 0) {
+                 return (
+                    <div className="text-xs mt-2 space-y-1 text-left">
+                        {differences.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
+                             <p key={index} className="truncate">
+                                <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
+                                <span className="text-muted-foreground line-through">{diff.oldValue ?? 'none'}</span>
+                                <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
+                                <span className='text-foreground'>{diff.newValue ?? 'none'}</span>
+                            </p>
+                        ))}
+                        {differences.length > PREVIEW_LIMIT && (
+                            <p className="text-muted-foreground">...and {differences.length - PREVIEW_LIMIT} more changes.</p>
+                        )}
+                    </div>
+                );
+            }
+        }
+        
+        if (lowerCaseAction.includes('delete') && payload) {
+            return <p className="text-sm mt-2 text-muted-foreground">Deleted record data is available in the full details view.</p>
+        }
+    } catch(e) {
+        // Fallback for parsing errors
+        return <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>;
+    }
+
+
+    return <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>;
 }
 
 
@@ -320,8 +380,7 @@ export default function AuditTimeline() {
                             </DialogContent>
                         </Dialog>
                     </div>
-                    <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>
-
+                    {renderPreview(event)}
                 </VerticalTimelineElement>
                 );
             })}
@@ -363,3 +422,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
