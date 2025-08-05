@@ -9,7 +9,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -50,7 +50,7 @@ const SampleEventSchema = z.object({
   user: z.object({
     id: z.string(),
     name: z.string(),
-    email: z.string().email(),
+    email: z.string(),
   }).optional(),
 });
 
@@ -287,6 +287,7 @@ export default function AuditTimeline() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedEntity, setSelectedEntity] = useState('all');
   const [selectedAction, setSelectedAction] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const { toast } = useToast();
 
@@ -379,6 +380,7 @@ export default function AuditTimeline() {
     setSearchTerm('');
     setSelectedEntity('all');
     setSelectedAction('all');
+    setSortOrder('desc');
   }
 
   const entities = useMemo(() => {
@@ -402,41 +404,51 @@ export default function AuditTimeline() {
       return Object.values(obj).some(value => deepSearch(value));
     };
 
-    return data.filter(event => {
-      const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
-      const actionMatch = selectedAction === 'all' || event.action === selectedAction;
-      
-      if (searchTerm === '') {
-        return entityMatch && actionMatch;
-      }
+    return data
+      .filter(event => {
+        const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
+        const actionMatch = selectedAction === 'all' || event.action === selectedAction;
+        
+        if (searchTerm === '') {
+          return entityMatch && actionMatch;
+        }
 
-      // Create a copy of the event to search, without the original payload/diff list to avoid double searching
-      const eventToSearch: any = { ...event };
-      delete eventToSearch.payload;
-      delete eventToSearch.difference_list;
-      
-      let searchMatch = deepSearch(eventToSearch);
+        // Create a copy of the event to search, without the original payload/diff list to avoid double searching
+        const eventToSearch: any = { ...event };
+        delete eventToSearch.payload;
+        delete eventToSearch.difference_list;
+        
+        let searchMatch = deepSearch(eventToSearch);
 
-      if (!searchMatch) {
-          try {
-              if (event.payload) {
-                  const parsedPayload = JSON.parse(event.payload);
-                  searchMatch = deepSearch(parsedPayload);
-              }
-              if (!searchMatch && event.difference_list) {
-                  const parsedDiff = JSON.parse(event.difference_list);
-                  searchMatch = deepSearch(parsedDiff);
-              }
-          } catch(e) {
-              // Fallback to searching the raw string if JSON parsing fails
-              if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-              if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-          }
-      }
+        if (!searchMatch) {
+            try {
+                if (event.payload) {
+                    const parsedPayload = JSON.parse(event.payload);
+                    searchMatch = deepSearch(parsedPayload);
+                }
+                if (!searchMatch && event.difference_list) {
+                    const parsedDiff = JSON.parse(event.difference_list);
+                    searchMatch = deepSearch(parsedDiff);
+                }
+            } catch(e) {
+                // Fallback to searching the raw string if JSON parsing fails
+                if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
+                if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
+            }
+        }
 
-      return entityMatch && actionMatch && searchMatch;
-    });
-  }, [data, searchTerm, selectedEntity, selectedAction]);
+        return entityMatch && actionMatch && searchMatch;
+      })
+      .sort((a, b) => {
+        const dateA = new Date(a.created_timestamp).getTime();
+        const dateB = new Date(b.created_timestamp).getTime();
+        if (sortOrder === 'asc') {
+            return dateA - dateB;
+        } else {
+            return dateB - dateA;
+        }
+      });
+  }, [data, searchTerm, selectedEntity, selectedAction, sortOrder]);
 
 
   if (view === 'timeline') {
@@ -481,6 +493,10 @@ export default function AuditTimeline() {
                             ))}
                         </SelectContent>
                     </Select>
+                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
+                        {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                        Sort {sortOrder === 'desc' ? 'Descending' : 'Ascending'}
+                    </Button>
                     <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
                 </div>
             </div>
@@ -593,5 +609,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
