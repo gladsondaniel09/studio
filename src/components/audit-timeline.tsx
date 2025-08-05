@@ -83,7 +83,7 @@ const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, 
             <span>
                 {parts.map((part, i) =>
                     part.toLowerCase() === searchTerm.toLowerCase() ? (
-                        <mark key={i} className="bg-primary/20 text-primary-foreground p-0 rounded">
+                        <mark key={i} className="bg-primary/20 text-foreground p-0 rounded">
                             {part}
                         </mark>
                     ) : (
@@ -656,3 +656,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
