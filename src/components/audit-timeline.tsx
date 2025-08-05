@@ -61,19 +61,15 @@ const renderDetails = (event: AuditEvent) => {
     const lowerCaseAction = action.toLowerCase();
     
     // For 'create' or 'insert' events
-    if (lowerCaseAction.includes('create') && payload) {
+    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && payload) {
         try {
             const parsedPayload = JSON.parse(payload);
-            const specificFields = [
-                'physicalContractId', 'provisionalPrice', 'provisionalPriceUom', 
-                'priceStatus', 'priceLots', 'pricedQuantity', 'balanceQuantity'
-            ];
-            const entries = Object.entries(parsedPayload).filter(([key]) => specificFields.includes(key));
+            const entries = Object.entries(parsedPayload);
             
             if (entries.length > 0) {
                 return (
                     <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 text-left">
                             {entries.map(([key, value]) => (
                                 <div key={key}>
                                     <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
