@@ -20,6 +20,9 @@ interface AuditEvent {
 }
 
 const getIconForEvent = (eventType: string) => {
+  if (typeof eventType !== 'string') {
+    return <File />;
+  }
   if (eventType.toLowerCase().includes('login')) {
     return <Lock />;
   }
@@ -120,6 +123,9 @@ export default function AuditTimeline() {
         <VerticalTimeline>
           {data.map((event, index) => {
             const { TimeStamp, User, 'Audit Event': auditEvent, ...otherDetails } = event;
+            if (!TimeStamp || !auditEvent) {
+              return null;
+            }
             const eventDate = new Date(TimeStamp);
             const icon = getIconForEvent(auditEvent);
             const isSuccess = otherDetails.Status?.toLowerCase() === 'success';
