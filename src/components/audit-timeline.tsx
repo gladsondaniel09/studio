@@ -9,7 +9,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -28,6 +28,12 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+    Accordion,
+    AccordionContent,
+    AccordionItem,
+    AccordionTrigger,
+} from "@/components/ui/accordion"
 
 interface AuditEvent {
   created_timestamp: string;
@@ -68,96 +74,134 @@ const renderDetails = (event: AuditEvent) => {
     const { action, payload, difference_list } = event;
     const lowerCaseAction = action.toLowerCase();
     
-    // For 'create' or 'insert' events
-    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && payload) {
-        try {
-            const parsedPayload = JSON.parse(payload);
-            const entries = Object.entries(parsedPayload);
-            
-            if (entries.length > 0) {
-                return (
-                    <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
-                            {entries.map(([key, value]) => (
-                                <div key={key}>
-                                    <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                                    <p className="text-sm break-all">{String(value)}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                );
-            }
-            return <p className="text-sm mt-4">{payload}</p>;
-        } catch (e) {
-            return <p className="text-sm mt-4">{payload}</p>;
-        }
+    let formattedView = null;
+    let rawPayload = null;
+    let rawDiffList = null;
+
+    try {
+        if (payload) rawPayload = JSON.parse(payload);
+    } catch (e) {
+        rawPayload = payload;
     }
 
-    // For 'update' events
-    if ((lowerCaseAction.includes('update')) && difference_list) {
-        try {
-            const differences = JSON.parse(difference_list);
-            return (
-                 <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
-                        {differences.map((diff: any, index: number) => (
-                            <div key={index}>
-                                <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
-                                <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground break-all">{String(diff.oldValue ?? 'none')}</span>
-                                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
-                                    <span className='break-all'>{String(diff.newValue ?? 'none')}</span>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                 </ScrollArea>
-            );
-        } catch (e) {
-             return <p className="text-sm mt-4">{difference_list}</p>;
-        }
-    }
-
-    // For 'delete' events
-    if (lowerCaseAction.includes('delete') && payload) {
-         try {
-            const parsedPayload = JSON.parse(payload);
-            return (
-                <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
-                        {Object.entries(parsedPayload).map(([key, value]) => (
-                            <div key={key}>
-                                <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                                <p className="text-sm break-all">{String(value)}</p>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-            );
-        } catch (e) {
-            return <p className="text-sm mt-4">{payload}</p>;
-        }
-    }
-
-    // Fallback for other details
-    const { created_timestamp, entity_name, action: evtAction, ...otherDetails } = event;
-    const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
-
-    if (detailsToShow.length > 0) {
-        return (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
-                {detailsToShow.map(([key, value]) => (
-                    <div key={key}>
-                        <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                        <p className="text-sm break-all">{String(value)}</p>
-                    </div>
-                ))}
-            </div>
-        );
+    try {
+        if (difference_list) rawDiffList = JSON.parse(difference_list);
+    } catch(e) {
+        rawDiffList = difference_list;
     }
     
-    return null;
+    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && rawPayload) {
+        const entries = Object.entries(rawPayload);
+        if (entries.length > 0) {
+            formattedView = (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
+                    {entries.map(([key, value]) => (
+                        <div key={key}>
+                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm break-all">{String(value)}</p>
+                        </div>
+                    ))}
+                </div>
+            );
+        } else {
+             formattedView = <p className="text-sm">{payload}</p>;
+        }
+    }
+
+    else if ((lowerCaseAction.includes('update')) && rawDiffList) {
+        if (Array.isArray(rawDiffList) && rawDiffList.length > 0) {
+            formattedView = (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
+                    {rawDiffList.map((diff: any, index: number) => (
+                        <div key={index}>
+                            <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground break-all">{String(diff.oldValue ?? 'none')}</span>
+                                <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                                <span className='break-all'>{String(diff.newValue ?? 'none')}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        } else {
+             formattedView = <p className="text-sm mt-4">{difference_list}</p>;
+        }
+    }
+
+    else if (lowerCaseAction.includes('delete') && rawPayload) {
+         const entries = Object.entries(rawPayload);
+        if (entries.length > 0) {
+            formattedView = (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
+                    {entries.map(([key, value]) => (
+                        <div key={key}>
+                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm break-all">{String(value)}</p>
+                        </div>
+                    ))}
+                </div>
+            );
+        } else {
+            formattedView = <p className="text-sm mt-4">{payload}</p>;
+        }
+    } else {
+        const { created_timestamp, entity_name, action: evtAction, ...otherDetails } = event;
+        const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
+
+        if (detailsToShow.length > 0) {
+            formattedView = (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
+                    {detailsToShow.map(([key, value]) => (
+                        <div key={key}>
+                            <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
+                            <p className="text-sm break-all">{String(value)}</p>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+    }
+
+    return (
+        <ScrollArea className="h-[60vh] w-full p-1">
+            <div className="space-y-4">
+                {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
+                
+                {(rawPayload || rawDiffList) && (
+                    <Accordion type="single" collapsible className="w-full pt-4">
+                        <AccordionItem value="item-1">
+                            <AccordionTrigger>
+                                <div className="flex items-center gap-2">
+                                    <Code className="h-4 w-4" /> Raw Details
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    {rawDiffList && (
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold">difference_list (JSON)</h4>
+                                            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
+                                                <pre className="text-xs">{JSON.stringify(rawDiffList, null, 2)}</pre>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {rawPayload && (
+                                        <div className="space-y-2">
+                                            <h4 className="font-semibold">payload (JSON)</h4>
+                                            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
+                                                <pre className="text-xs">{JSON.stringify(rawPayload, null, 2)}</pre>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
+                )}
+            </div>
+        </ScrollArea>
+    );
 }
 
 const renderPreview = (event: AuditEvent) => {
@@ -473,5 +517,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
