@@ -13,11 +13,11 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 
 interface AuditEvent {
-  TimeStamp: string;
-  User: string;
-  'Audit Event': string;
-  Payload?: string;
-  Difference?: string;
+  created_timestamp: string;
+  entity_name: string;
+  action: string;
+  payload?: string;
+  difference_list?: string;
   [key: string]: any;
 }
 
@@ -41,25 +41,28 @@ const getIconForEvent = (eventType: string) => {
   if (lowerCaseEvent.includes('user')) {
     return <User />;
   }
+   if (lowerCaseEvent.includes('update') || lowerCaseEvent.includes('create') || lowerCaseEvent.includes('delete')) {
+    return <File />;
+  }
   return <File />;
 };
 
 const renderDetails = (event: AuditEvent) => {
-  const { 'Audit Event': auditEvent, Payload, Difference, TimeStamp, User, ...otherDetails } = event;
-  const lowerCaseEvent = auditEvent.toLowerCase();
+  const { action, payload, difference_list, created_timestamp, entity_name, ...otherDetails } = event;
+  const lowerCaseEvent = action.toLowerCase();
 
-  if (lowerCaseEvent.includes('create') && Payload) {
-    return <p className="text-sm">{Payload}</p>;
+  if (lowerCaseEvent.includes('create') && payload) {
+    return <p className="text-sm">{payload}</p>;
   }
 
-  if ((lowerCaseEvent.includes('update') || lowerCaseEvent.includes('delete')) && Difference) {
-    return <p className="text-sm">{Difference}</p>;
+  if ((lowerCaseEvent.includes('update') || lowerCaseEvent.includes('delete')) && difference_list) {
+    return <p className="text-sm">{difference_list}</p>;
   }
 
   return (
     <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-left">
       {Object.entries(otherDetails).map(([key, value]) => {
-        if (!value) return null;
+        if (!value || value === 'NULL') return null;
         return (
           <div key={key}>
             <p className="font-bold text-sm">{key}</p>
@@ -81,7 +84,6 @@ export default function AuditTimeline() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
-    setData([]);
     const targetFile = e.target.files?.[0];
     if (targetFile) {
         if (targetFile.type !== 'text/csv') {
@@ -106,9 +108,9 @@ export default function AuditTimeline() {
           skipEmptyLines: true,
           complete: (results) => {
               const parsedData = results.data as AuditEvent[];
-              const validData = parsedData.filter(row => row.TimeStamp && row['Audit Event']);
+              const validData = parsedData.filter(row => row.created_timestamp && row.action);
               if (validData.length === 0) {
-                  setError('CSV file is empty, invalid, or does not contain required "TimeStamp" and "Audit Event" columns.');
+                  setError('CSV file is empty, invalid, or does not contain required "created_timestamp" and "action" columns.');
                   setView('upload');
               } else {
                   setData(validData);
@@ -142,13 +144,12 @@ export default function AuditTimeline() {
             </div>
             <VerticalTimeline lineColor={'hsl(var(--border))'}>
             {data.map((event, index) => {
-                const { TimeStamp, User, 'Audit Event': auditEvent } = event;
-                 if (!TimeStamp || !auditEvent) {
+                const { created_timestamp, entity_name, action } = event;
+                 if (!created_timestamp || !action) {
                     return null;
                 }
-                const eventDate = new Date(TimeStamp);
-                const icon = getIconForEvent(auditEvent);
-                const isSuccess = event.Status?.toLowerCase() === 'success';
+                const eventDate = new Date(created_timestamp);
+                const icon = getIconForEvent(action);
 
                 return (
                 <VerticalTimelineElement
@@ -172,8 +173,8 @@ export default function AuditTimeline() {
                     }}
                     icon={icon}
                 >
-                    <h3 className="vertical-timeline-element-title text-lg font-bold text-left">{auditEvent}</h3>
-                    <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{User}</h4>
+                    <h3 className="vertical-timeline-element-title text-lg font-bold text-left">{action}</h3>
+                    <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
                     {renderDetails(event)}
                 </VerticalTimelineElement>
                 );
@@ -207,7 +208,7 @@ export default function AuditTimeline() {
             
             {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             
-            <Button onClick={handleViewTimeline} disabled={!file} className="w-full">
+            <Button onClick={handleViewTimeline} disabled={!file || !!error} className="w-full">
                 <Eye className="mr-2"/>
                 View Timeline
             </Button>
