@@ -18,7 +18,7 @@ const SampleEventSchema = z.object({
   user: z.object({
     id: z.string().describe("The user's ID."),
     name: z.string().describe("The user's name."),
-    email: z.string().email().describe("The user's email."),
+    email: z.string().describe("The user's email."),
   }).describe('The user who performed the action.'),
 });
 
