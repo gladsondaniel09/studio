@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Papa from 'papaparse';
 import {
   VerticalTimeline,
@@ -9,7 +9,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -39,6 +39,8 @@ import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
+import { Walkthrough, type Step } from './walkthrough';
+
 
 const SampleEventSchema = z.object({
   created_timestamp: z.string(),
@@ -324,7 +326,7 @@ const renderPreview = (event: AuditEvent) => {
                  return (
                     <div className="text-xs mt-2 space-y-1 text-left">
                         {differences.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
-                             <p key={index} className="truncate">
+                             <p key={index} className="truncate min-w-0">
                                 <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
                                 <span className="text-muted-foreground line-through">{String(diff.oldValue ?? 'none')}</span>
                                 <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
@@ -362,6 +364,29 @@ export default function AuditTimeline() {
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
+
+  useEffect(() => {
+    // Show walkthrough on initial load if no data is present
+    const hasSeenWalkthrough = localStorage.getItem('hasSeenWalkthrough');
+    if (!hasSeenWalkthrough) {
+        setShowWalkthrough(true);
+        localStorage.setItem('hasSeenWalkthrough', 'true');
+    }
+  }, []);
+
+  const walkthroughSteps: Step[] = [
+    {
+      element: '#upload-card',
+      title: 'Upload Your Data',
+      content: 'Start by uploading a CSV file of your audit logs. You can drag and drop a file or click here to select one.',
+    },
+    {
+      element: '#demo-button',
+      title: 'Or View a Demo',
+      content: 'Don\'t have a file? Click here to generate some sample data and see how the timeline works.',
+    },
+  ];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -535,60 +560,61 @@ export default function AuditTimeline() {
 
   if (view === 'timeline') {
     return (
-        <div>
-            <header className="flex justify-between items-start mb-8">
-                <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
-                <div className="flex-shrink-0">
-                    <ThemeToggle />
-                </div>
-            </header>
-            
-            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
-                 <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-primary"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 7.82566 4.41707 4.33857 7.99933 2.99961M12 2V12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 2C6.47715 2 2 6.47715 2 12C2 16.1743 4.41707 19.6614 7.99933 21.0004" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 4"/></svg>
-                    Audit Log Timeline
-                </h1>
-                <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-                    <div className="relative w-full sm:w-auto">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                            placeholder="Search logs..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 w-full sm:w-64"
-                        />
-                    </div>
-                    <Select value={selectedAction} onValueChange={setSelectedAction}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                            <SelectValue placeholder="Filter by action" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {actions.map(action => (
-                                <SelectItem key={action} value={action}>
-                                    {action === 'all' ? 'All Actions' : action}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select value={selectedEntity} onValueChange={setSelectedEntity}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                            <SelectValue placeholder="Filter by entity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {entities.map(entity => (
-                                <SelectItem key={entity} value={entity}>
-                                    {entity === 'all' ? 'All Entities' : entity}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
-                        {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
-                        Sort {sortOrder === 'desc' ? 'Descending' : 'Ascending'}
-                    </Button>
-                    <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
-                </div>
-            </div>
+      <div className='flex flex-col'>
+          <header className="flex-none flex justify-between items-start mb-8">
+              <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+              <div className="flex-shrink-0 ml-4">
+                  <ThemeToggle />
+              </div>
+          </header>
+          
+          <div className="flex-none flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
+               <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-primary"><path d="M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 7.82566 4.41707 4.33857 7.99933 2.99961M12 2V12H22" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M12 2C6.47715 2 2 6.47715 2 12C2 16.1743 4.41707 19.6614 7.99933 21.0004" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 4"/></svg>
+                  Audit Log Timeline
+              </h1>
+              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-auto">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                          placeholder="Search logs..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="pl-10 w-full sm:w-64"
+                      />
+                  </div>
+                  <Select value={selectedAction} onValueChange={setSelectedAction}>
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder="Filter by action" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {actions.map(action => (
+                              <SelectItem key={action} value={action}>
+                                  {action === 'all' ? 'All Actions' : action}
+                              </SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                  <Select value={selectedEntity} onValueChange={setSelectedEntity}>
+                      <SelectTrigger className="w-full sm:w-[180px]">
+                          <SelectValue placeholder="Filter by entity" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {entities.map(entity => (
+                              <SelectItem key={entity} value={entity}>
+                                  {entity === 'all' ? 'All Entities' : entity}
+                              </SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
+                      {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                      Sort {sortOrder === 'desc' ? 'Descending' : 'Ascending'}
+                  </Button>
+                  <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
+              </div>
+          </div>
+          <div className='flex-grow'>
             <VerticalTimeline lineColor={'hsl(var(--border))'}>
             {filteredData.map((event, index) => {
                 const { created_timestamp, entity_name, action } = event;
@@ -616,13 +642,13 @@ export default function AuditTimeline() {
                     iconStyle={{ 
                         background: 'hsl(var(--primary))', 
                         color: 'hsl(var(--primary-foreground))',
-                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 8px hsl(var(--primary))'
+                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 6px hsl(var(--primary))'
                     }}
                     icon={icon}
                 >
                     <div className="flex justify-between items-start">
                         <div>
-                            <h3 className="vertical-timeline-element-title text-lg font-bold text-left">{action}</h3>
+                            <h3 className="vertical-timeline-element-title text-lg font-bold text-left font-headline">{action}</h3>
                             <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
                         </div>
                         <Dialog>
@@ -644,16 +670,25 @@ export default function AuditTimeline() {
                 );
             })}
             </VerticalTimeline>
+          </div>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-[80vh]">
-        <div className="w-full max-w-lg text-right mb-4">
-             <ThemeToggle />
+        <Walkthrough
+            steps={walkthroughSteps}
+            isOpen={showWalkthrough}
+            onClose={() => setShowWalkthrough(false)}
+        />
+        <div className="w-full max-w-lg text-right mb-4 flex justify-end items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => setShowWalkthrough(true)}>
+                <HelpCircle className="w-5 h-5" />
+            </Button>
+            <ThemeToggle />
         </div>
-        <Card className="w-full max-w-lg text-center">
+        <Card className="w-full max-w-lg text-center" id="upload-card">
             <CardHeader>
             <CardTitle className="text-2xl font-headline">Upload Audit Log</CardTitle>
             </CardHeader>
@@ -686,7 +721,7 @@ export default function AuditTimeline() {
                     <hr className="w-full border-border"/>
                 </div>
 
-                <Button onClick={handleDemo} disabled={isDemoLoading} className="w-full">
+                <Button id="demo-button" onClick={handleDemo} disabled={isDemoLoading} className="w-full">
                     {isDemoLoading ? (
                         <Loader className="mr-2 animate-spin" />
                     ) : (
