@@ -53,9 +53,8 @@ export default function AuditTimeline() {
     if (file) {
       setLoading(true);
       setError(null);
-      setData([]);
-      setShowTimeline(false);
       setFileName(file.name);
+      setShowTimeline(false);
 
       Papa.parse<AuditEvent>(file, {
         header: true,
