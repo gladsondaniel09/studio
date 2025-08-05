@@ -8,7 +8,7 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -20,6 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 
 interface AuditEvent {
   created_timestamp: string;
@@ -68,12 +75,12 @@ const renderDetails = (event: AuditEvent) => {
             
             if (entries.length > 0) {
                 return (
-                    <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 text-left">
+                    <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
                             {entries.map(([key, value]) => (
                                 <div key={key}>
                                     <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                                    <p className="text-sm">{String(value)}</p>
+                                    <p className="text-sm break-all">{String(value)}</p>
                                 </div>
                             ))}
                         </div>
@@ -91,15 +98,15 @@ const renderDetails = (event: AuditEvent) => {
         try {
             const differences = JSON.parse(difference_list);
             return (
-                 <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                 <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
                         {differences.map((diff: any, index: number) => (
                             <div key={index}>
                                 <p className="font-bold text-sm capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}</p>
                                 <div className="flex items-center gap-2 text-sm">
-                                    <span className="text-muted-foreground">{diff.oldValue ?? 'none'}</span>
-                                    <ArrowRight className="w-4 h-4 text-primary" />
-                                    <span>{diff.newValue ?? 'none'}</span>
+                                    <span className="text-muted-foreground break-all">{diff.oldValue ?? 'none'}</span>
+                                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                                    <span className='break-all'>{diff.newValue ?? 'none'}</span>
                                 </div>
                             </div>
                         ))}
@@ -116,12 +123,12 @@ const renderDetails = (event: AuditEvent) => {
          try {
             const parsedPayload = JSON.parse(payload);
             return (
-                <ScrollArea className="mt-4 h-40 w-full rounded-md border p-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 text-left">
+                <ScrollArea className="mt-4 h-[60vh] w-full rounded-md border p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4 text-left">
                         {Object.entries(parsedPayload).map(([key, value]) => (
                             <div key={key}>
                                 <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                                <p className="text-sm">{String(value)}</p>
+                                <p className="text-sm break-all">{String(value)}</p>
                             </div>
                         ))}
                     </div>
@@ -142,7 +149,7 @@ const renderDetails = (event: AuditEvent) => {
                 {detailsToShow.map(([key, value]) => (
                     <div key={key}>
                         <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                        <p className="text-sm">{String(value)}</p>
+                        <p className="text-sm break-all">{String(value)}</p>
                     </div>
                 ))}
             </div>
@@ -294,9 +301,27 @@ export default function AuditTimeline() {
                     }}
                     icon={icon}
                 >
-                    <h3 className="vertical-timeline-element-title text-lg font-bold text-left">{action}</h3>
-                    <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
-                    {renderDetails(event)}
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <h3 className="vertical-timeline-element-title text-lg font-bold text-left">{action}</h3>
+                            <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
+                        </div>
+                        <Dialog>
+                            <DialogTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                    <Maximize className="h-4 w-4" />
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh]">
+                                <DialogHeader>
+                                    <DialogTitle>{action} on {entity_name}</DialogTitle>
+                                </DialogHeader>
+                                {renderDetails(event)}
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                    <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>
+
                 </VerticalTimelineElement>
                 );
             })}
