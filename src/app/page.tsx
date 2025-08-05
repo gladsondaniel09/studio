@@ -1,4 +1,5 @@
 import AuditTimeline from '@/components/audit-timeline';
+import FlowChart from '@/components/flow-chart';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function Home() {
