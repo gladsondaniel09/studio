@@ -36,7 +36,6 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion"
 import { generateDemoData } from '@/ai/flows/demo-data-flow';
-import { sortEvents } from '@/ai/flows/sort-events-flow';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
@@ -335,9 +334,26 @@ const renderPreview = (event: AuditEvent) => {
 }
 
 
+const logicalSortOrder = [
+    'trade', 'plannedobligation',
+    'shipment', 'container',
+    'stock', 'movement',
+    'actualization', 'actualizedquantityobligations',
+    'pricing', 'price',
+    'cost',
+    'invoice'
+];
+
+const getEntitySortKey = (entityName: string): number => {
+    const lowerEntityName = entityName.toLowerCase();
+    const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
+    return index === -1 ? logicalSortOrder.length : index;
+};
+
+
 export default function AuditTimeline() {
   const [data, setData] = useState<AuditEvent[]>([]);
-  const [aiSortedData, setAiSortedData] = useState<AuditEvent[] | null>(null);
+  const [logicallySortedData, setLogicallySortedData] = useState<AuditEvent[] | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'upload' | 'timeline'>('upload');
@@ -346,8 +362,7 @@ export default function AuditTimeline() {
   const [selectedEntity, setSelectedEntity] = useState('all');
   const [selectedAction, setSelectedAction] = useState('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [sortType, setSortType] = useState<'timestamp' | 'ai'>('timestamp');
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [sortType, setSortType] = useState<'timestamp' | 'logical'>('timestamp');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
@@ -402,7 +417,7 @@ export default function AuditTimeline() {
     {
         element: '#filter-controls',
         title: 'Filter & Sort',
-        content: 'Refine the timeline by filtering on specific actions or entities, and sort the events by date or with AI.',
+        content: 'Refine the timeline by filtering on specific actions or entities, and sort the events by date or with our magic sort.',
         placement: 'bottom',
     },
     {
@@ -493,48 +508,35 @@ export default function AuditTimeline() {
     }
   }
 
-  const handleAiSort = async () => {
-    if (sortType === 'ai') {
+  const handleLogicalSort = () => {
+    if (sortType === 'logical') {
         setSortType('timestamp');
         return;
     }
 
-    if (aiSortedData) {
-        setSortType('ai');
+    if (logicallySortedData) {
+        setSortType('logical');
         return;
     }
 
-    setIsAiLoading(true);
-    try {
-        const result = await sortEvents({ events: data });
-        
-        if (result.sorted_ids && result.sorted_ids.length === data.length) {
-            const reorderedData = result.sorted_ids.map(id => data[id]);
-            setAiSortedData(reorderedData);
-            setSortType('ai');
-        } else {
-            toast({
-                variant: 'destructive',
-                title: 'Error during AI Sort',
-                description: 'The AI did not return a valid sorted list.',
-            });
+    const sorted = [...data].sort((a, b) => {
+        const aKey = getEntitySortKey(a.entity_name);
+        const bKey = getEntitySortKey(b.entity_name);
+        if (aKey !== bKey) {
+            return aKey - bKey;
         }
-    } catch(e: any) {
-        console.error(e);
-        toast({
-            variant: 'destructive',
-            title: 'Error during AI Sort',
-            description: e.message || 'An unexpected error occurred.',
-        });
-    } finally {
-        setIsAiLoading(false);
-    }
+        // If entities are in the same stage, sort by original timestamp
+        return new Date(a.created_timestamp).getTime() - new Date(b.created_timestamp).getTime();
+    });
+    
+    setLogicallySortedData(sorted);
+    setSortType('logical');
   }
 
   const handleUploadNew = () => {
     setView('upload');
     setData([]);
-    setAiSortedData(null);
+    setLogicallySortedData(null);
     setFileName(null);
     setFile(null);
     setError(null);
@@ -563,7 +565,7 @@ export default function AuditTimeline() {
   }, [data]);
 
   const filteredData = useMemo(() => {
-    const sourceData = sortType === 'ai' && aiSortedData ? aiSortedData : data;
+    const sourceData = sortType === 'logical' && logicallySortedData ? logicallySortedData : data;
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     const deepSearch = (obj: any): boolean => {
@@ -580,7 +582,7 @@ export default function AuditTimeline() {
       dataToFilter.sort((a, b) => {
         const dateA = new Date(a.created_timestamp).getTime();
         const dateB = new Date(b.created_timestamp).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        return sortOrder === 'asc' ? dateA - dateB : dateB - a;
       });
     }
     
@@ -632,7 +634,7 @@ export default function AuditTimeline() {
 
         return searchMatch;
       });
-  }, [data, aiSortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
+  }, [data, logicallySortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
@@ -692,13 +694,13 @@ export default function AuditTimeline() {
                             ))}
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'ai'}>
+                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'logical'}>
                         {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
                         Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
                     </Button>
-                    <Button variant={sortType === 'ai' ? 'default' : 'outline'} onClick={handleAiSort} disabled={isAiLoading} className="w-full sm:w-auto">
-                        {isAiLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
-                        AI Sort
+                    <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={handleLogicalSort} className="w-full sm:w-auto">
+                        <Wand2 className="mr-2 h-4 w-4" />
+                        Magic Sort
                     </Button>
                   </div>
                   <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
@@ -827,3 +829,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
