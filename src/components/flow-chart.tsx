@@ -44,7 +44,7 @@ const flowStages = [
   {
     name: 'Cost',
     icon: DollarSign,
-    entities: ['cost'],
+    entities: ['cost', 'cashflow'],
   },
   {
     name: 'Commercial Invoice',
@@ -77,7 +77,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
       const entityName = event.entity_name.toLowerCase();
       flowStages.forEach(stage => {
         if (stage.name === 'Physical Purchase Trade') {
-            if (stage.entities.some(e => entityName === e || (entityName.includes(e) && !entityName.includes('cost')))) {
+            if (stage.entities.some(e => entityName === e || (entityName.includes(e) && !entityName.includes('cost') && !entityName.includes('cashflow')))) {
                 active.add(stage.name);
             }
         } else {

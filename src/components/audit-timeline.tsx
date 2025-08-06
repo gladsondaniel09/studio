@@ -340,7 +340,7 @@ const logicalSortOrder = [
     'stock', 'movement',
     'actualization', 'actualizedquantityobligations',
     'pricing', 'price',
-    'cost',
+    'cost', 'cashflow',
     'invoice'
 ];
 
@@ -349,6 +349,18 @@ const getEntitySortKey = (entityName: string): number => {
     const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
     return index === -1 ? logicalSortOrder.length : index;
 };
+
+const getTradeId = (event: AuditEvent): string | null => {
+    if (event.payload) {
+        try {
+            const parsed = JSON.parse(event.payload);
+            return parsed.tradeId || null;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
 
 
 export default function AuditTimeline() {
@@ -525,7 +537,16 @@ export default function AuditTimeline() {
         if (aKey !== bKey) {
             return aKey - bKey;
         }
-        // If entities are in the same stage, sort by original timestamp
+
+        // Secondary sort by tradeId to group related events
+        const aTradeId = getTradeId(a);
+        const bTradeId = getTradeId(b);
+
+        if (aTradeId && bTradeId && aTradeId !== bTradeId) {
+            return aTradeId.localeCompare(bTradeId);
+        }
+        
+        // Tertiary sort by original timestamp
         return new Date(a.created_timestamp).getTime() - new Date(b.created_timestamp).getTime();
     });
     
@@ -829,5 +850,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
