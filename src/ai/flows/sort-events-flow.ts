@@ -40,7 +40,7 @@ export async function sortEvents(input: SortEventsInput): Promise<SortEventsOutp
 
 const prompt = ai.definePrompt({
   name: 'sortEventsPrompt',
-  input: {schema: SortEventsInputSchema},
+  input: {schema: z.object({ jsonString: z.string() })},
   output: {schema: SortEventsOutputSchema},
   prompt: `You are an expert in business process analysis. Your task is to reorder a list of audit log events to reflect the logical business flow, rather than the raw timestamp order. Due to system latencies, events may be logged out of their true sequence.
 
@@ -57,7 +57,7 @@ The correct logical business flow is as follows:
 Analyze the provided list of events. Pay close attention to the 'entity_name', 'action', and the details within the 'payload' and 'difference_list' to understand the relationships between events. Reorder the entire list of events to match the logical sequence described above. Return the full list of events in the correct logical order.
 
 Events to sort:
-{{{jsonStringify events}}}
+{{{jsonString}}}
 `,
 });
 
@@ -68,7 +68,7 @@ const sortEventsFlow = ai.defineFlow(
     outputSchema: SortEventsOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt(input);
+    const {output} = await prompt({ jsonString: JSON.stringify(input.events) });
     return output!;
   }
 );
