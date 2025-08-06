@@ -350,6 +350,33 @@ const extractAllIds = (obj: any, prefix = ''): Record<string, any> => {
     }, {} as Record<string, any>);
 };
 
+const logicalSortOrder = [
+    // Higher-level business process flow
+    ['plannedobligation', 'trade', 'physicalobligationeodrawdata'], // Stage 1: Trade
+    ['tradecost', 'cost', 'cashflow'],                            // Stage 2: Costing
+    ['shipment', 'container'],                                    // Stage 3: Logistics
+    ['stock', 'movement'],                                        // Stage 4: Inventory
+    ['actualization', 'actualizedquantityobligation'],            // Stage 5: Actualization
+    ['pricing', 'price'],                                         // Stage 6: Pricing
+    ['invoice'],                                                  // Stage 7: Invoicing
+];
+
+const getEntitySortKey = (entityName: string): number => {
+    if (!entityName) return logicalSortOrder.length;
+    const lowerEntityName = entityName.toLowerCase();
+    
+    // Handle specific cases first to avoid broad matches
+    if (lowerEntityName.includes('tradecost')) return 1;
+    if (lowerEntityName.includes('plannedobligation')) return 0;
+    if (lowerEntityName.includes('physicalobligationeodrawdata')) return 0;
+
+    for (let i = 0; i < logicalSortOrder.length; i++) {
+        if (logicalSortOrder[i].some(keyword => lowerEntityName.includes(keyword))) {
+            return i;
+        }
+    }
+    return logicalSortOrder.length; // Default for unmatched entities
+};
 
 const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
     const indexedEvents = events.map((event, index) => ({ ...event, originalIndex: index }));
@@ -430,6 +457,32 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
 
     return sortedIndices.map(i => events[i]);
 };
+
+// New Hybrid Sort Function
+const performHybridSort = (events: AuditEvent[]): AuditEvent[] => {
+    // 1. Group events by high-level business stage
+    const groupedByStage: { [key: number]: AuditEvent[] } = {};
+    events.forEach(event => {
+        const key = getEntitySortKey(event.entity_name);
+        if (!groupedByStage[key]) {
+            groupedByStage[key] = [];
+        }
+        groupedByStage[key].push(event);
+    });
+
+    // 2. Sort the stage keys
+    const sortedStageKeys = Object.keys(groupedByStage).map(Number).sort((a, b) => a - b);
+
+    // 3. Apply topological sort within each stage and flatten
+    const finalSortedEvents: AuditEvent[] = [];
+    sortedStageKeys.forEach(key => {
+        const stageEvents = groupedByStage[key];
+        const sortedStageEvents = performTopologicalSort(stageEvents);
+        finalSortedEvents.push(...sortedStageEvents);
+    });
+    
+    return finalSortedEvents;
+}
 
 
 export default function AuditTimeline() {
@@ -600,7 +653,7 @@ export default function AuditTimeline() {
         return;
     }
 
-    const sorted = performTopologicalSort(data);
+    const sorted = performHybridSort(data);
     setLogicallySortedData(sorted);
     setSortType('logical');
   }
@@ -904,3 +957,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
