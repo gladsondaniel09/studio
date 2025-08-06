@@ -335,20 +335,39 @@ const renderPreview = (event: AuditEvent) => {
 
 
 const logicalSortOrder = [
-    'trade', 'plannedobligation',
+    'trade',
+    'plannedobligation',
+    'tradecost',
     'cost', 
-    'shipment', 'container',
-    'stock', 'movement',
-    'actualization', 'actualizedquantityobligations',
-    'pricing', 'price',
+    'shipment', 
+    'container',
+    'stock', 
+    'movement',
+    'actualization', 
+    'actualizedquantityobligation',
+    'pricing', 
+    'price',
     'cashflow',
     'invoice'
 ];
 
 const getEntitySortKey = (entityName: string): number => {
     const lowerEntityName = entityName.toLowerCase();
-    const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
-    return index === -1 ? logicalSortOrder.length : index;
+    
+    // Use a more specific check to avoid incorrect matching
+    for (let i = 0; i < logicalSortOrder.length; i++) {
+        const key = logicalSortOrder[i];
+        // Exact match or if the entity name starts with the key + 'EOD' (for cases like TradeCostEODRawData)
+        if (lowerEntityName === key || lowerEntityName.startsWith(key + 'eod')) {
+             if (key === 'trade' && lowerEntityName.includes('cost')) {
+                continue; // Skip 'trade' if 'tradecost' is in the name
+            }
+            return i;
+        }
+    }
+    // Fallback to includes for less specific matches if no better match is found
+     const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
+     return index === -1 ? logicalSortOrder.length : index;
 };
 
 const getTradeId = (event: AuditEvent): string | null => {
@@ -618,7 +637,7 @@ export default function AuditTimeline() {
         if (selectedFlowEntities) {
             if (selectedFlowEntities.includes('trade')) {
                 // Special handling for the "trade" stage to exclude costs
-                flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
+                flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost') && !entityName.includes('cashflow'));
             } else {
                 flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
             }
