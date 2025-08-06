@@ -2,7 +2,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ShoppingCart, Ship, CheckCircle, Tag, FileText, ChevronRight, DollarSign } from 'lucide-react';
+import { ShoppingCart, Ship, CheckCircle, Tag, FileText, ChevronRight, DollarSign, Warehouse } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { z } from 'zod';
@@ -25,6 +25,11 @@ const flowStages = [
     name: 'Container Shipment',
     icon: Ship,
     entities: ['shipment', 'container'],
+  },
+    {
+    name: 'Inventory',
+    icon: Warehouse,
+    entities: ['stock', 'movement'],
   },
   {
     name: 'Actualization',
