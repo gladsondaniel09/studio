@@ -352,13 +352,14 @@ const extractAllIds = (obj: any, prefix = ''): Record<string, any> => {
 
 const logicalSortOrder = [
     // Higher-level business process flow
-    ['plannedobligation', 'trade', 'physicalobligationeodrawdata'], // Stage 1: Trade
-    ['tradecost', 'cost', 'cashflow'],                            // Stage 2: Costing
-    ['shipment', 'container'],                                    // Stage 3: Logistics
-    ['stock', 'movement'],                                        // Stage 4: Inventory
-    ['actualization', 'actualizedquantityobligation'],            // Stage 5: Actualization
-    ['pricing', 'price'],                                         // Stage 6: Pricing
-    ['invoice'],                                                  // Stage 7: Invoicing
+    ['plannedobligation', 'physicalobligationeodrawdata'], // Stage 0
+    ['trade'],                                                  // Stage 1
+    ['tradecost', 'cost', 'cashflow'],                          // Stage 2
+    ['shipment', 'container'],                                  // Stage 3
+    ['stock', 'movement'],                                      // Stage 4
+    ['actualization', 'actualizedquantityobligation'],          // Stage 5
+    ['pricing', 'price'],                                       // Stage 6
+    ['invoice'],                                                // Stage 7
 ];
 
 const getEntitySortKey = (entityName: string): number => {
@@ -366,10 +367,10 @@ const getEntitySortKey = (entityName: string): number => {
     const lowerEntityName = entityName.toLowerCase();
     
     // Handle specific cases first to avoid broad matches
-    if (lowerEntityName.includes('tradecost')) return 1;
+    if (lowerEntityName.includes('tradecost')) return 2;
     if (lowerEntityName.includes('plannedobligation')) return 0;
     if (lowerEntityName.includes('physicalobligationeodrawdata')) return 0;
-
+    
     for (let i = 0; i < logicalSortOrder.length; i++) {
         if (logicalSortOrder[i].some(keyword => lowerEntityName.includes(keyword))) {
             return i;
@@ -756,7 +757,7 @@ export default function AuditTimeline() {
       return [...dataToFilter].sort((a, b) => {
         const dateA = new Date(a.created_timestamp).getTime();
         const dateB = new Date(b.created_timestamp).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - a.created_timestamp.localeCompare(b.created_timestamp);
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
       });
     }
     
@@ -957,5 +958,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
