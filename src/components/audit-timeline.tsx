@@ -336,11 +336,12 @@ const renderPreview = (event: AuditEvent) => {
 
 const logicalSortOrder = [
     'trade', 'plannedobligation',
+    'cost', 
     'shipment', 'container',
     'stock', 'movement',
     'actualization', 'actualizedquantityobligations',
     'pricing', 'price',
-    'cost', 'cashflow',
+    'cashflow',
     'invoice'
 ];
 
@@ -354,12 +355,15 @@ const getTradeId = (event: AuditEvent): string | null => {
     if (event.payload) {
         try {
             const parsed = JSON.parse(event.payload);
-            return parsed.tradeId || null;
+            return parsed.tradeId || parsed.uuid || null;
         } catch {
-            return null;
+            // Check for tradeId in the root object for non-payload events
+            const anyEvent = event as any;
+            return anyEvent.tradeId || null;
         }
     }
-    return null;
+     const anyEvent = event as any;
+     return anyEvent.tradeId || null;
 }
 
 
@@ -614,7 +618,7 @@ export default function AuditTimeline() {
         if (selectedFlowEntities) {
             if (selectedFlowEntities.includes('trade')) {
                 // Special handling for the "trade" stage to exclude costs
-                flowMatch = selectedFlowEntities.some(e => entityName === e || (entityName.includes(e) && !entityName.includes('cost')));
+                flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
             } else {
                 flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
             }
