@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -506,16 +507,16 @@ export default function AuditTimeline() {
     setIsAiLoading(true);
     try {
         const result = await sortEvents({ events: data });
-        const validatedData = z.array(SampleEventSchema).safeParse(result.events);
-         if (validatedData.success) {
-            setAiSortedData(validatedData.data);
+        
+        if (result.sorted_ids && result.sorted_ids.length === data.length) {
+            const reorderedData = result.sorted_ids.map(id => data[id]);
+            setAiSortedData(reorderedData);
             setSortType('ai');
         } else {
-            console.error(validatedData.error);
             toast({
                 variant: 'destructive',
-                title: 'Error Parsing AI-Sorted Data',
-                description: 'The format of the AI-sorted data was invalid.',
+                title: 'Error during AI Sort',
+                description: 'The AI did not return a valid sorted list.',
             });
         }
     } catch(e: any) {
@@ -573,8 +574,17 @@ export default function AuditTimeline() {
       return Object.values(obj).some(value => deepSearch(value));
     };
 
-    return sourceData
-      .filter(event => {
+    let dataToFilter = [...sourceData];
+
+    if (sortType === 'timestamp') {
+      dataToFilter.sort((a, b) => {
+        const dateA = new Date(a.created_timestamp).getTime();
+        const dateB = new Date(b.created_timestamp).getTime();
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+    }
+    
+    return dataToFilter.filter(event => {
         const entityName = event.entity_name.toLowerCase();
         let flowMatch = !selectedFlowEntities;
 
@@ -590,10 +600,10 @@ export default function AuditTimeline() {
         const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
         const actionMatch = selectedAction === 'all' || event.action === selectedAction;
         
-        if (!flowMatch) return false;
+        if (!flowMatch || !entityMatch || !actionMatch) return false;
         
         if (searchTerm === '') {
-          return entityMatch && actionMatch;
+          return true;
         }
 
         // Create a copy of the event to search, without the original payload/diff list to avoid double searching
@@ -620,17 +630,7 @@ export default function AuditTimeline() {
             }
         }
 
-        return entityMatch && actionMatch && searchMatch;
-      })
-      .sort((a, b) => {
-        if (sortType === 'ai') return 0; // Keep AI-sorted order
-        const dateA = new Date(a.created_timestamp).getTime();
-        const dateB = new Date(b.created_timestamp).getTime();
-        if (sortOrder === 'asc') {
-            return dateA - dateB;
-        } else {
-            return dateB - dateA;
-        }
+        return searchMatch;
       });
   }, [data, aiSortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
 

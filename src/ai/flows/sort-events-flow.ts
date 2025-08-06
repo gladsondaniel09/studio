@@ -8,16 +8,32 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { SampleEventSchema, SortEventsInput, SortEventsOutput } from '@/lib/types';
+import { SortEventsInput, SortEventsOutput } from '@/lib/types';
 
+// The input to the flow will be the full event list
 const SortEventsInputSchema = z.object({
-  events: z.array(SampleEventSchema),
+  events: z.array(z.any()), // Keep it flexible for now
 });
 
 
+const SimplifiedEventSchema = z.object({
+  id: z.number(),
+  entity_name: z.string(),
+  action: z.string(),
+});
+
+// The input to the prompt will be the simplified list
+const PromptInputSchema = z.object({
+  events: z.array(SimplifiedEventSchema),
+});
+
+
+// The output from the AI should be the sorted IDs
 const SortEventsOutputSchema = z.object({
-  events: z.array(SampleEventSchema),
+  sorted_ids: z.array(z.number()).describe('An array of the event IDs in their new logical order.'),
 });
+export { type SortEventsOutput };
+
 
 export async function sortEvents(input: SortEventsInput): Promise<SortEventsOutput> {
   return sortEventsFlow(input);
@@ -25,7 +41,7 @@ export async function sortEvents(input: SortEventsInput): Promise<SortEventsOutp
 
 const prompt = ai.definePrompt({
   name: 'sortEventsPrompt',
-  input: {schema: z.object({ jsonString: z.string() })},
+  input: {schema: PromptInputSchema},
   output: {schema: SortEventsOutputSchema},
   prompt: `You are an expert in business process analysis. Your task is to reorder a list of audit log events to reflect the logical business flow, rather than the raw timestamp order. Due to system latencies, events may be logged out of their true sequence.
 
@@ -39,10 +55,12 @@ The correct logical business flow is as follows:
 7.  Settlement – An invoice is generated.
 8.  Invoice Screen – The final invoice is moved to the invoice screen.
 
-Analyze the provided list of events. Pay close attention to the 'entity_name', 'action', and the details within the 'payload' and 'difference_list' to understand the relationships between events. Reorder the entire list of events to match the logical sequence described above. Return the full list of events in the correct logical order.
+You will be given a list of events, each with a unique 'id'. Analyze the provided list of events. Pay close attention to the 'entity_name' and 'action' to understand the relationships between events. 
+
+Your task is to return a single array named 'sorted_ids' which contains the original 'id's of the events in the correct logical order. Do not return the full event objects, only the ordered array of their IDs.
 
 Events to sort:
-{{{jsonString}}}
+{{{jsonStringify events}}}
 `,
 });
 
@@ -53,7 +71,14 @@ const sortEventsFlow = ai.defineFlow(
     outputSchema: SortEventsOutputSchema,
   },
   async (input) => {
-    const {output} = await prompt({ jsonString: JSON.stringify(input.events) });
+    // Create the simplified list to send to the AI
+    const simplifiedEvents = input.events.map((event, index) => ({
+        id: index, // Use the original index as the unique ID
+        entity_name: event.entity_name,
+        action: event.action
+    }));
+
+    const {output} = await prompt({ events: simplifiedEvents });
     return output!;
   }
 );

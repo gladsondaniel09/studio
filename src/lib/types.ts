@@ -25,12 +25,12 @@ export type DemoDataOutput = z.infer<typeof DemoDataOutputSchema>;
 
 
 const SortEventsInputSchema = z.object({
-  events: z.array(SampleEventSchema),
+  events: z.array(z.any()),
 });
 export type SortEventsInput = z.infer<typeof SortEventsInputSchema>;
 
 
 const SortEventsOutputSchema = z.object({
-  events: z.array(SampleEventSchema),
+  sorted_ids: z.array(z.number()),
 });
 export type SortEventsOutput = z.infer<typeof SortEventsOutputSchema>;
