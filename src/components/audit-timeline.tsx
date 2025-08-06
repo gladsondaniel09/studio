@@ -334,52 +334,102 @@ const renderPreview = (event: AuditEvent) => {
 }
 
 
-const logicalSortOrder = [
-    'trade',
-    'plannedobligation',
-    'tradecost',
-    'cost',
-    'shipment',
-    'container',
-    'stock',
-    'movement',
-    'actualization',
-    'actualizedquantityobligation',
-    'pricing',
-    'price',
-    'cashflow',
-    'invoice',
-];
-
-const getEntitySortKey = (entityName: string): number => {
-    const lowerEntityName = entityName.toLowerCase();
-
-    // Handle specific cases first to avoid broad matches
-    if (lowerEntityName.includes('physicalobligationeodrawdata')) return 1;
-    if (lowerEntityName.includes('plannedobligation')) return 1;
-    if (lowerEntityName.includes('tradecost')) return 2;
-    if (lowerEntityName.includes('cost')) return 3;
-    if (lowerEntityName.includes('trade')) return 0;
-
-    // Handle the rest of the order
-    const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
-    return index === -1 ? logicalSortOrder.length : index;
+// Extracts all key-value pairs from a nested object
+const extractAllIds = (obj: any, prefix = ''): Record<string, any> => {
+    if (obj === null || typeof obj !== 'object') {
+        return {};
+    }
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+        const newKey = prefix ? `${prefix}.${key}` : key;
+        if (value !== null && value !== '' && (typeof value === 'string' || typeof value === 'number')) {
+            acc[newKey] = value;
+        } else if (typeof value === 'object') {
+            Object.assign(acc, extractAllIds(value, newKey));
+        }
+        return acc;
+    }, {} as Record<string, any>);
 };
 
-const getTradeId = (event: AuditEvent): string | null => {
-    if (event.payload) {
-        try {
-            const parsed = JSON.parse(event.payload);
-            return parsed.tradeId || parsed.uuid || null;
-        } catch {
-            // Check for tradeId in the root object for non-payload events
-            const anyEvent = event as any;
-            return anyEvent.tradeId || null;
+
+const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
+    const indexedEvents = events.map((event, index) => ({ ...event, originalIndex: index }));
+    const idToCreatorIndex: Record<string, number> = {};
+    const adj: number[][] = Array(events.length).fill(0).map(() => []);
+    const inDegree: number[] = Array(events.length).fill(0);
+
+    // First pass: identify creators of all IDs
+    indexedEvents.forEach((event, index) => {
+        if (event.action.toLowerCase() === 'create') {
+            const data = event.payload ? JSON.parse(event.payload) : {};
+            const allIds = extractAllIds(data);
+            for (const key in allIds) {
+                // Prioritize specific ID fields, especially the top-level uuid
+                if (key.endsWith('Id') || key.endsWith('uuid')) {
+                     const idValue = `${key}=${allIds[key]}`;
+                     if (!idToCreatorIndex.hasOwnProperty(idValue)) {
+                        idToCreatorIndex[idValue] = index;
+                    }
+                }
+            }
+        }
+    });
+
+    // Second pass: build dependency graph
+    indexedEvents.forEach((event, index) => {
+        const payload = event.payload ? JSON.parse(event.payload) : {};
+        const diff = event.difference_list ? JSON.parse(event.difference_list) : {};
+        const allData = { ...event, ...payload, ...diff };
+        const allIds = extractAllIds(allData);
+
+        for (const key in allIds) {
+            if (key.endsWith('Id') || key.endsWith('uuid')) {
+                const idValue = `${key}=${allIds[key]}`;
+                const creatorIndex = idToCreatorIndex[idValue];
+
+                if (creatorIndex !== undefined && creatorIndex !== index) {
+                    // Check if the dependency is from the creator to this event
+                    adj[creatorIndex].push(index);
+                    inDegree[index]++;
+                }
+            }
+        }
+    });
+
+    // Perform topological sort
+    const queue: number[] = [];
+    for (let i = 0; i < events.length; i++) {
+        if (inDegree[i] === 0) {
+            queue.push(i);
         }
     }
-     const anyEvent = event as any;
-     return anyEvent.tradeId || null;
-}
+
+    const sortedIndices: number[] = [];
+    while (queue.length > 0) {
+        const u = queue.shift()!;
+        sortedIndices.push(u);
+
+        for (const v of adj[u]) {
+            inDegree[v]--;
+            if (inDegree[v] === 0) {
+                queue.push(v);
+            }
+        }
+    }
+
+    // If there's a cycle, the sort won't include all events.
+    // In that case, append the remaining ones, sorted by timestamp.
+    if (sortedIndices.length < events.length) {
+        const remainingIndices = events
+            .map((_, i) => i)
+            .filter(i => !sortedIndices.includes(i));
+        
+        remainingIndices.sort((a,b) => new Date(events[a].created_timestamp).getTime() - new Date(events[b].created_timestamp).getTime());
+
+        return [...sortedIndices, ...remainingIndices].map(i => events[i]);
+    }
+
+    return sortedIndices.map(i => events[i]);
+};
 
 
 export default function AuditTimeline() {
@@ -550,25 +600,7 @@ export default function AuditTimeline() {
         return;
     }
 
-    const sorted = [...data].sort((a, b) => {
-        const aKey = getEntitySortKey(a.entity_name);
-        const bKey = getEntitySortKey(b.entity_name);
-        if (aKey !== bKey) {
-            return aKey - bKey;
-        }
-
-        // Secondary sort by tradeId to group related events
-        const aTradeId = getTradeId(a);
-        const bTradeId = getTradeId(b);
-
-        if (aTradeId && bTradeId && aTradeId !== bTradeId) {
-            return aTradeId.localeCompare(bTradeId);
-        }
-        
-        // Tertiary sort by original timestamp
-        return new Date(a.created_timestamp).getTime() - new Date(b.created_timestamp).getTime();
-    });
-    
+    const sorted = performTopologicalSort(data);
     setLogicallySortedData(sorted);
     setSortType('logical');
   }
@@ -617,7 +649,7 @@ export default function AuditTimeline() {
       return Object.values(obj).some(value => deepSearch(value));
     };
 
-    const dataToFilter = sourceData.filter(event => {
+    let dataToFilter = sourceData.filter(event => {
       if (!event.entity_name) return false;
       const entityName = event.entity_name.toLowerCase();
       let flowMatch = !selectedFlowEntities;
