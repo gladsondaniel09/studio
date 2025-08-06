@@ -4,30 +4,16 @@
  * @fileOverview A flow for generating sample audit log data for the demo.
  *
  * - generateDemoData - A function that generates a list of sample audit events.
- * - DemoDataOutput - The return type for the generateDemoData function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
+import { DemoDataOutput, SampleEventSchema } from '@/lib/types';
 
-const SampleEventSchema = z.object({
-  created_timestamp: z.string().describe('An ISO 8601 timestamp for when the event occurred.'),
-  entity_name: z.string().describe('The name of the entity that was affected, e.g., "Trade" or "User Account".'),
-  action: z.enum(['create', 'update', 'delete']).describe('The type of action that occurred.'),
-  payload: z.string().optional().describe("A JSON string representing the full data object for 'create' or 'delete' actions."),
-  difference_list: z.string().optional().describe("A JSON string of an array of differences for 'update' actions. Each difference should have 'label', 'oldValue', and 'newValue' fields."),
-  user: z.object({
-    id: z.string().describe("The user's ID."),
-    name: z.string().describe("The user's name."),
-    email: z.string().describe("The user's email."),
-  }).optional().describe('The user who performed the action.'),
-});
 
 const DemoDataOutputSchema = z.object({
   events: z.array(SampleEventSchema),
 });
-
-export type DemoDataOutput = z.infer<typeof DemoDataOutputSchema>;
 
 export async function generateDemoData(): Promise<DemoDataOutput> {
   return generateDemoDataFlow();

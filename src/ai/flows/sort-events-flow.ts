@@ -1,38 +1,23 @@
+
 'use server';
 /**
  * @fileOverview A flow for intelligently sorting audit log events based on business logic.
  *
  * - sortEvents - A function that reorders a list of audit events according to a defined business flow.
- * - SortEventsInput - The input type for the sortEvents function.
- * - SortEventsOutput - The return type for the sortEvents function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-
-const SampleEventSchema = z.object({
-  created_timestamp: z.string().describe('An ISO 8601 timestamp for when the event occurred.'),
-  entity_name: z.string().describe('The name of the entity that was affected, e.g., "Trade" or "User Account".'),
-  action: z.enum(['create', 'update', 'delete']).describe('The type of action that occurred.'),
-  payload: z.string().optional().describe("A JSON string representing the full data object for 'create' or 'delete' actions."),
-  difference_list: z.string().optional().describe("A JSON string of an array of differences for 'update' actions. Each difference should have 'label', 'oldValue', and 'newValue' fields."),
-  user: z.object({
-    id: z.string().describe("The user's ID."),
-    name: z.string().describe("The user's name."),
-    email: z.string().describe("The user's email."),
-  }).optional().describe('The user who performed the action.'),
-});
+import { SampleEventSchema, SortEventsInput, SortEventsOutput } from '@/lib/types';
 
 const SortEventsInputSchema = z.object({
   events: z.array(SampleEventSchema),
 });
-export type SortEventsInput = z.infer<typeof SortEventsInputSchema>;
 
 
 const SortEventsOutputSchema = z.object({
   events: z.array(SampleEventSchema),
 });
-export type SortEventsOutput = z.infer<typeof SortEventsOutputSchema>;
 
 export async function sortEvents(input: SortEventsInput): Promise<SortEventsOutput> {
   return sortEventsFlow(input);

@@ -41,26 +41,8 @@ import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
+import { AuditEvent, SampleEventSchema } from '@/lib/types';
 
-
-const SampleEventSchema = z.object({
-  created_timestamp: z.string(),
-  entity_name: z.string(),
-  action: z.preprocess(
-    (val) => String(val).toLowerCase(),
-    z.enum(['create', 'update', 'delete'])
-  ),
-  payload: z.string().optional(),
-  difference_list: z.string().optional(),
-  user: z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.string(),
-  }).optional(),
-});
-
-
-type AuditEvent = z.infer<typeof SampleEventSchema>;
 
 const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, title: string }) => {
     const { toast } = useToast();
