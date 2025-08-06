@@ -859,7 +859,7 @@ export default function AuditTimeline() {
                     }}
                     contentArrowStyle={{ borderRight: '7px solid hsl(var(--card))' }}
                     dateClassName="!text-muted-foreground !font-sans"
-                    date={sortType === 'timestamp' ? format(eventDate, "PPpp") : 'Logically Sorted'}
+                    date={format(eventDate, "PPpp")}
                     iconStyle={{ 
                         background: 'hsl(var(--primary))', 
                         color: 'hsl(var(--primary-foreground))',
