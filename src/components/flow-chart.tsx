@@ -18,7 +18,7 @@ const flowStages = [
   {
     name: 'Physical Purchase Trade',
     icon: ShoppingCart,
-    entities: ['trade', 'plannedobligation'],
+    entities: ['trade', 'plannedobligation', 'physicalobligationeodrawdata'],
     dynamic_label: true,
   },
   {
@@ -79,18 +79,19 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
   const activeStages = useMemo(() => {
     const active = new Set<string>();
     data.forEach(event => {
-      const entityName = event.entity_name.toLowerCase();
-      flowStages.forEach(stage => {
-        if (stage.name === 'Physical Purchase Trade') {
-             if (stage.entities.some(e => entityName.includes(e) && !entityName.includes('cost'))) {
-                active.add(stage.name);
+        if (!event.entity_name) return;
+        const entityName = event.entity_name.toLowerCase();
+        flowStages.forEach(stage => {
+            if (stage.name === 'Physical Purchase Trade') {
+                if (stage.entities.some(e => entityName.includes(e) && !entityName.includes('cost'))) {
+                    active.add(stage.name);
+                }
+            } else {
+                if (stage.entities.some(e => entityName.includes(e))) {
+                    active.add(stage.name);
+                }
             }
-        } else {
-            if (stage.entities.some(e => entityName.includes(e))) {
-              active.add(stage.name);
-            }
-        }
-      });
+        });
     });
     return active;
   }, [data]);

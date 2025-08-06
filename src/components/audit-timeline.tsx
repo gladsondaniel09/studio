@@ -355,6 +355,7 @@ const getEntitySortKey = (entityName: string): number => {
     const lowerEntityName = entityName.toLowerCase();
 
     // Handle specific cases first to avoid broad matches
+    if (lowerEntityName.includes('physicalobligationeodrawdata')) return 1;
     if (lowerEntityName.includes('plannedobligation')) return 1;
     if (lowerEntityName.includes('tradecost')) return 2;
     if (lowerEntityName.includes('cost')) return 3;
@@ -604,74 +605,76 @@ export default function AuditTimeline() {
   }, [data]);
 
   const filteredData = useMemo(() => {
-    const sourceData = sortType === 'logical' && logicallySortedData ? logicallySortedData : data;
+    let sourceData = (sortType === 'logical' && logicallySortedData) ? logicallySortedData : data;
+
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     const deepSearch = (obj: any): boolean => {
-        if (obj === null || obj === undefined) return false;
-        if (typeof obj !== 'object') {
-            return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
-        }
-        return Object.values(obj).some(value => deepSearch(value));
+      if (obj === null || obj === undefined) return false;
+      if (typeof obj !== 'object') {
+        return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
+      }
+      return Object.values(obj).some(value => deepSearch(value));
     };
-    
+
     const dataToFilter = sourceData.filter(event => {
-        const entityName = event.entity_name.toLowerCase();
-        let flowMatch = !selectedFlowEntities;
+      if (!event.entity_name) return false;
+      const entityName = event.entity_name.toLowerCase();
+      let flowMatch = !selectedFlowEntities;
 
-        if (selectedFlowEntities) {
-            if (selectedFlowEntities.includes('trade')) {
-                // Special handling for the "trade" stage to exclude costs
-                flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost') && !entityName.includes('cashflow'));
-            } else {
-                flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
-            }
+      if (selectedFlowEntities) {
+          if (selectedFlowEntities.includes('trade')) {
+              // Special handling for the "trade" stage to exclude costs
+              flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
+          } else {
+              flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
+          }
+      }
+
+      const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
+      const actionMatch = selectedAction === 'all' || event.action === selectedAction;
+
+      if (!flowMatch || !entityMatch || !actionMatch) return false;
+
+      if (searchTerm === '') {
+        return true;
+      }
+
+      // Create a copy of the event to search, without the original payload/diff list to avoid double searching
+      const eventToSearch: any = { ...event };
+      delete eventToSearch.payload;
+      delete eventToSearch.difference_list;
+
+      let searchMatch = deepSearch(eventToSearch);
+
+      if (!searchMatch) {
+        try {
+          if (event.payload) {
+            const parsedPayload = JSON.parse(event.payload);
+            searchMatch = deepSearch(parsedPayload);
+          }
+          if (!searchMatch && event.difference_list) {
+            const parsedDiff = JSON.parse(event.difference_list);
+            searchMatch = deepSearch(parsedDiff);
+          }
+        } catch (e) {
+          // Fallback to searching the raw string if JSON parsing fails
+          if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
+          if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
         }
-        
-        const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
-        const actionMatch = selectedAction === 'all' || event.action === selectedAction;
-        
-        if (!flowMatch || !entityMatch || !actionMatch) return false;
-        
-        if (searchTerm === '') {
-            return true;
-        }
+      }
 
-        // Create a copy of the event to search, without the original payload/diff list to avoid double searching
-        const eventToSearch: any = { ...event };
-        delete eventToSearch.payload;
-        delete eventToSearch.difference_list;
-        
-        let searchMatch = deepSearch(eventToSearch);
-
-        if (!searchMatch) {
-            try {
-                if (event.payload) {
-                    const parsedPayload = JSON.parse(event.payload);
-                    searchMatch = deepSearch(parsedPayload);
-                }
-                if (!searchMatch && event.difference_list) {
-                    const parsedDiff = JSON.parse(event.difference_list);
-                    searchMatch = deepSearch(parsedDiff);
-                }
-            } catch(e) {
-                // Fallback to searching the raw string if JSON parsing fails
-                if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-                if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-            }
-        }
-
-        return searchMatch;
+      return searchMatch;
     });
 
     if (sortType === 'timestamp') {
-        return [...dataToFilter].sort((a, b) => {
-            const dateA = new Date(a.created_timestamp).getTime();
-            const dateB = new Date(b.created_timestamp).getTime();
-            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
-        });
+      return [...dataToFilter].sort((a, b) => {
+        const dateA = new Date(a.created_timestamp).getTime();
+        const dateB = new Date(b.created_timestamp).getTime();
+        return sortOrder === 'asc' ? dateA - dateB : dateB - a.created_timestamp.localeCompare(b.created_timestamp);
+      });
     }
-
+    
     return dataToFilter;
 
   }, [data, logicallySortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
