@@ -206,13 +206,13 @@ const renderDetails = (event: AuditEvent) => {
     let rawDiffList = null;
 
     try {
-        if (payload) rawPayload = JSON.parse(payload);
+        if (payload && payload !== 'NULL') rawPayload = JSON.parse(payload);
     } catch (e) {
         rawPayload = payload;
     }
 
     try {
-        if (difference_list) rawDiffList = JSON.parse(difference_list);
+        if (difference_list && difference_list !== 'NULL') rawDiffList = JSON.parse(difference_list);
     } catch(e) {
         rawDiffList = difference_list;
     }
@@ -283,7 +283,7 @@ const renderPreview = (event: AuditEvent) => {
     const PREVIEW_LIMIT = 2;
 
     try {
-        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert') || lowerCaseAction.includes('delete')) && payload) {
+        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert') || lowerCaseAction.includes('delete')) && payload && payload !== 'NULL') {
             const parsedPayload = JSON.parse(payload);
             const entries = Object.entries(parsedPayload);
             if (entries.length > 0) {
@@ -303,7 +303,7 @@ const renderPreview = (event: AuditEvent) => {
             }
         }
 
-        if (lowerCaseAction.includes('update') && difference_list) {
+        if (lowerCaseAction.includes('update') && difference_list && difference_list !== 'NULL') {
             const differences = JSON.parse(difference_list);
             if (differences.length > 0) {
                  return (
@@ -360,7 +360,7 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
     // First pass: identify creators of all IDs
     indexedEvents.forEach((event, index) => {
         if (event.action.toLowerCase() === 'create') {
-            const data = event.payload ? JSON.parse(event.payload) : {};
+            const data = (event.payload && event.payload !== 'NULL') ? JSON.parse(event.payload) : {};
             const allIds = extractAllIds(data);
             for (const key in allIds) {
                 // Prioritize specific ID fields, especially the top-level uuid
@@ -376,8 +376,8 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
 
     // Second pass: build dependency graph
     indexedEvents.forEach((event, index) => {
-        const payload = event.payload ? JSON.parse(event.payload) : {};
-        const diff = event.difference_list ? JSON.parse(event.difference_list) : {};
+        const payload = (event.payload && event.payload !== 'NULL') ? JSON.parse(event.payload) : {};
+        const diff = (event.difference_list && event.difference_list !== 'NULL') ? JSON.parse(event.difference_list) : {};
         const allData = { ...event, ...payload, ...diff };
         const allIds = extractAllIds(allData);
 
@@ -681,11 +681,11 @@ export default function AuditTimeline() {
 
       if (!searchMatch) {
         try {
-          if (event.payload) {
+          if (event.payload && event.payload !== 'NULL') {
             const parsedPayload = JSON.parse(event.payload);
             searchMatch = deepSearch(parsedPayload);
           }
-          if (!searchMatch && event.difference_list) {
+          if (!searchMatch && event.difference_list && event.difference_list !== 'NULL') {
             const parsedDiff = JSON.parse(event.difference_list);
             searchMatch = deepSearch(parsedDiff);
           }
