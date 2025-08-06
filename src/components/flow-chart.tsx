@@ -71,8 +71,14 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
     data.forEach(event => {
       const entityName = event.entity_name.toLowerCase();
       flowStages.forEach(stage => {
-        if (stage.entities.some(e => entityName.includes(e))) {
-          active.add(stage.name);
+        if (stage.name === 'Physical Purchase Trade') {
+            if (stage.entities.some(e => entityName === e || (entityName.includes(e) && !entityName.includes('cost')))) {
+                active.add(stage.name);
+            }
+        } else {
+            if (stage.entities.some(e => entityName.includes(e))) {
+              active.add(stage.name);
+            }
         }
       });
     });

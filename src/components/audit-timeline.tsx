@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
 import {
   VerticalTimeline,
@@ -548,7 +548,18 @@ export default function AuditTimeline() {
 
     return data
       .filter(event => {
-        const flowMatch = !selectedFlowEntities || selectedFlowEntities.some(e => event.entity_name.toLowerCase().includes(e));
+        const entityName = event.entity_name.toLowerCase();
+        let flowMatch = !selectedFlowEntities;
+
+        if (selectedFlowEntities) {
+            if (selectedFlowEntities.includes('trade')) {
+                // Special handling for the "trade" stage to exclude costs
+                flowMatch = selectedFlowEntities.some(e => entityName === e || (entityName.includes(e) && !entityName.includes('cost')));
+            } else {
+                flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
+            }
+        }
+        
         const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
         const actionMatch = selectedAction === 'all' || event.action === selectedAction;
         
@@ -690,7 +701,7 @@ export default function AuditTimeline() {
                     iconStyle={{ 
                         background: 'hsl(var(--primary))', 
                         color: 'hsl(var(--primary-foreground))',
-                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 8px hsl(var(--primary))'
+                        boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 6px hsl(var(--primary))'
                     }}
                     icon={icon}
                 >
