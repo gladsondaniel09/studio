@@ -338,36 +338,31 @@ const logicalSortOrder = [
     'trade',
     'plannedobligation',
     'tradecost',
-    'cost', 
-    'shipment', 
+    'cost',
+    'shipment',
     'container',
-    'stock', 
+    'stock',
     'movement',
-    'actualization', 
+    'actualization',
     'actualizedquantityobligation',
-    'pricing', 
+    'pricing',
     'price',
     'cashflow',
-    'invoice'
+    'invoice',
 ];
 
 const getEntitySortKey = (entityName: string): number => {
     const lowerEntityName = entityName.toLowerCase();
-    
-    // Use a more specific check to avoid incorrect matching
-    for (let i = 0; i < logicalSortOrder.length; i++) {
-        const key = logicalSortOrder[i];
-        // Exact match or if the entity name starts with the key + 'EOD' (for cases like TradeCostEODRawData)
-        if (lowerEntityName === key || lowerEntityName.startsWith(key + 'eod')) {
-             if (key === 'trade' && lowerEntityName.includes('cost')) {
-                continue; // Skip 'trade' if 'tradecost' is in the name
-            }
-            return i;
-        }
-    }
-    // Fallback to includes for less specific matches if no better match is found
-     const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
-     return index === -1 ? logicalSortOrder.length : index;
+
+    // Handle specific cases first to avoid broad matches
+    if (lowerEntityName.includes('plannedobligation')) return 1;
+    if (lowerEntityName.includes('tradecost')) return 2;
+    if (lowerEntityName.includes('cost')) return 3;
+    if (lowerEntityName.includes('trade')) return 0;
+
+    // Handle the rest of the order
+    const index = logicalSortOrder.findIndex(key => lowerEntityName.includes(key));
+    return index === -1 ? logicalSortOrder.length : index;
 };
 
 const getTradeId = (event: AuditEvent): string | null => {
@@ -613,24 +608,14 @@ export default function AuditTimeline() {
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
     const deepSearch = (obj: any): boolean => {
-      if (obj === null || obj === undefined) return false;
-      if (typeof obj !== 'object') {
-        return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
-      }
-      return Object.values(obj).some(value => deepSearch(value));
+        if (obj === null || obj === undefined) return false;
+        if (typeof obj !== 'object') {
+            return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
+        }
+        return Object.values(obj).some(value => deepSearch(value));
     };
-
-    let dataToFilter = [...sourceData];
-
-    if (sortType === 'timestamp') {
-      dataToFilter.sort((a, b) => {
-        const dateA = new Date(a.created_timestamp).getTime();
-        const dateB = new Date(b.created_timestamp).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - a;
-      });
-    }
     
-    return dataToFilter.filter(event => {
+    const dataToFilter = sourceData.filter(event => {
         const entityName = event.entity_name.toLowerCase();
         let flowMatch = !selectedFlowEntities;
 
@@ -649,7 +634,7 @@ export default function AuditTimeline() {
         if (!flowMatch || !entityMatch || !actionMatch) return false;
         
         if (searchTerm === '') {
-          return true;
+            return true;
         }
 
         // Create a copy of the event to search, without the original payload/diff list to avoid double searching
@@ -677,7 +662,18 @@ export default function AuditTimeline() {
         }
 
         return searchMatch;
-      });
+    });
+
+    if (sortType === 'timestamp') {
+        return [...dataToFilter].sort((a, b) => {
+            const dateA = new Date(a.created_timestamp).getTime();
+            const dateB = new Date(b.created_timestamp).getTime();
+            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        });
+    }
+
+    return dataToFilter;
+
   }, [data, logicallySortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
 
 
