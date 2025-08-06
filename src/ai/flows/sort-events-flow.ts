@@ -16,15 +16,9 @@ const SortEventsInputSchema = z.object({
 });
 
 
-const SimplifiedEventSchema = z.object({
-  id: z.number(),
-  entity_name: z.string(),
-  action: z.string(),
-});
-
-// The input to the prompt will be the simplified list
+// The input to the prompt will be the simplified list as a JSON string
 const PromptInputSchema = z.object({
-  events: z.array(SimplifiedEventSchema),
+  jsonString: z.string(),
 });
 
 
@@ -60,7 +54,7 @@ You will be given a list of events, each with a unique 'id'. Analyze the provide
 Your task is to return a single array named 'sorted_ids' which contains the original 'id's of the events in the correct logical order. Do not return the full event objects, only the ordered array of their IDs.
 
 Events to sort:
-{{{jsonStringify events}}}
+{{{jsonString}}}
 `,
 });
 
@@ -78,7 +72,7 @@ const sortEventsFlow = ai.defineFlow(
         action: event.action
     }));
 
-    const {output} = await prompt({ events: simplifiedEvents });
+    const {output} = await prompt({ jsonString: JSON.stringify(simplifiedEvents) });
     return output!;
   }
 );
