@@ -10,18 +10,19 @@ import {
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
 import { format } from 'date-fns';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2 } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
     Dialog,
     DialogContent,
@@ -255,7 +256,7 @@ const renderDetails = (event: AuditEvent) => {
             <div className="space-y-4">
                 {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
                 
-                {(payload || difference_list) && (
+                {(rawPayload || rawDiffList) && (
                     <Accordion type="single" collapsible className="w-full pt-4">
                         <AccordionItem value="item-1">
                             <AccordionTrigger>
@@ -351,15 +352,14 @@ const extractAllIds = (obj: any, prefix = ''): Record<string, any> => {
 };
 
 const logicalSortOrder = [
-    // Higher-level business process flow
     ['plannedobligation', 'physicalobligationeodrawdata'], // Stage 0
-    ['trade'],                                                  // Stage 1
-    ['tradecost', 'cost', 'cashflow'],                          // Stage 2
-    ['shipment', 'container'],                                  // Stage 3
-    ['stock', 'movement'],                                      // Stage 4
-    ['actualization', 'actualizedquantityobligation'],          // Stage 5
-    ['pricing', 'price'],                                       // Stage 6
-    ['invoice'],                                                // Stage 7
+    ['trade'], // Stage 1
+    ['tradecost', 'cost', 'cashflow'], // Stage 2
+    ['shipment', 'container'], // Stage 3
+    ['stock', 'movement'], // Stage 4
+    ['actualization', 'actualizedquantityobligation'], // Stage 5
+    ['pricing', 'price'], // Stage 6
+    ['invoice'], // Stage 7
 ];
 
 const getEntitySortKey = (entityName: string): number => {
@@ -367,9 +367,9 @@ const getEntitySortKey = (entityName: string): number => {
     const lowerEntityName = entityName.toLowerCase();
     
     // Handle specific cases first to avoid broad matches
-    if (lowerEntityName.includes('tradecost')) return 2;
     if (lowerEntityName.includes('plannedobligation')) return 0;
     if (lowerEntityName.includes('physicalobligationeodrawdata')) return 0;
+    if (lowerEntityName.includes('tradecost')) return 2;
     
     for (let i = 0; i < logicalSortOrder.length; i++) {
         if (logicalSortOrder[i].some(keyword => lowerEntityName.includes(keyword))) {
@@ -405,7 +405,8 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
     // Second pass: build dependency graph
     indexedEvents.forEach((event, index) => {
         const payload = (event.payload && event.payload !== 'NULL') ? JSON.parse(event.payload) : {};
-        const diff = (event.difference_list && event.difference_list !== 'NULL') ? JSON.parse(event.difference_list) : {};
+        const diffList = (event.difference_list && event.difference_list !== 'NULL') ? JSON.parse(event.difference_list) : [];
+        const diff = Array.isArray(diffList) ? diffList.reduce((acc, curr) => ({...acc, ...curr}), {}) : {};
         const allData = { ...event, ...payload, ...diff };
         const allIds = extractAllIds(allData);
 
@@ -485,6 +486,76 @@ const performHybridSort = (events: AuditEvent[]): AuditEvent[] => {
     return finalSortedEvents;
 }
 
+const MultiSelectFilter = ({
+  options,
+  selectedValues,
+  onSelectionChange,
+  title,
+  className,
+}: {
+  options: string[];
+  selectedValues: string[];
+  onSelectionChange: (newSelection: string[]) => void;
+  title: string;
+  className?: string;
+}) => {
+  const handleSelectAll = () => {
+    if (selectedValues.length === options.length) {
+      onSelectionChange([]);
+    } else {
+      onSelectionChange(options);
+    }
+  };
+
+  const handleSelect = (value: string) => {
+    if (selectedValues.includes(value)) {
+      onSelectionChange(selectedValues.filter((v) => v !== value));
+    } else {
+      onSelectionChange([...selectedValues, value]);
+    }
+  };
+
+  const getButtonText = () => {
+    if (selectedValues.length === 0 || selectedValues.length === options.length) {
+        return `All ${title}s`;
+    }
+    if (selectedValues.length === 1) {
+        return selectedValues[0];
+    }
+    return `${selectedValues.length} ${title}s Selected`;
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className={className}>
+          {getButtonText()}
+          <ChevronDown className="ml-2 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56">
+        <DropdownMenuLabel>{title}s</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={selectedValues.length === options.length}
+          onCheckedChange={handleSelectAll}
+        >
+          Select All
+        </DropdownMenuCheckboxItem>
+        {options.map((option) => (
+          <DropdownMenuCheckboxItem
+            key={option}
+            checked={selectedValues.includes(option)}
+            onCheckedChange={() => handleSelect(option)}
+          >
+            {option}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 
 export default function AuditTimeline() {
   const [data, setData] = useState<AuditEvent[]>([]);
@@ -494,8 +565,8 @@ export default function AuditTimeline() {
   const [view, setView] = useState<'upload' | 'timeline'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedEntity, setSelectedEntity] = useState('all');
-  const [selectedAction, setSelectedAction] = useState('all');
+  const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
+  const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [sortType, setSortType] = useState<'timestamp' | 'logical'>('timestamp');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
@@ -667,8 +738,8 @@ export default function AuditTimeline() {
     setFile(null);
     setError(null);
     setSearchTerm('');
-    setSelectedEntity('all');
-    setSelectedAction('all');
+    setSelectedEntities([]);
+    setSelectedActions([]);
     setSortOrder('desc');
     setSortType('timestamp');
     setSelectedFlowEntities(null);
@@ -682,13 +753,21 @@ export default function AuditTimeline() {
 
   const entities = useMemo(() => {
     const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
-    return ['all', ...uniqueEntities];
+    return uniqueEntities.sort();
   }, [data]);
 
   const actions = useMemo(() => {
     const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
-    return ['all', ...uniqueActions];
+    return uniqueActions.sort();
   }, [data]);
+
+  useEffect(() => {
+    if (data.length > 0) {
+        setSelectedEntities(entities);
+        setSelectedActions(actions);
+    }
+  }, [data, entities, actions]);
+
 
   const filteredData = useMemo(() => {
     let sourceData = (sortType === 'logical' && logicallySortedData) ? logicallySortedData : data;
@@ -717,8 +796,8 @@ export default function AuditTimeline() {
           }
       }
 
-      const entityMatch = selectedEntity === 'all' || event.entity_name === selectedEntity;
-      const actionMatch = selectedAction === 'all' || event.action === selectedAction;
+      const entityMatch = selectedEntities.length === 0 || selectedEntities.includes(event.entity_name);
+      const actionMatch = selectedActions.length === 0 || selectedActions.includes(event.action);
 
       if (!flowMatch || !entityMatch || !actionMatch) return false;
 
@@ -757,13 +836,17 @@ export default function AuditTimeline() {
       return [...dataToFilter].sort((a, b) => {
         const dateA = new Date(a.created_timestamp).getTime();
         const dateB = new Date(b.created_timestamp).getTime();
-        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        if (sortOrder === 'asc') {
+            return dateA - dateB;
+        } else {
+            return dateB - dateA;
+        }
       });
     }
     
     return dataToFilter;
 
-  }, [data, logicallySortedData, searchTerm, selectedEntity, selectedAction, sortOrder, sortType, selectedFlowEntities]);
+  }, [data, logicallySortedData, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
@@ -799,30 +882,20 @@ export default function AuditTimeline() {
                       />
                   </div>
                   <div id="filter-controls" className="contents sm:flex sm:flex-row sm:items-center sm:gap-4 w-full sm:w-auto">
-                    <Select value={selectedAction} onValueChange={setSelectedAction}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                            <SelectValue placeholder="Filter by action" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {actions.map(action => (
-                                <SelectItem key={action} value={action}>
-                                    {action === 'all' ? 'All Actions' : action}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Select value={selectedEntity} onValueChange={setSelectedEntity}>
-                        <SelectTrigger className="w-full sm:w-[180px]">
-                            <SelectValue placeholder="Filter by entity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {entities.map(entity => (
-                                <SelectItem key={entity} value={entity}>
-                                    {entity === 'all' ? 'All Entities' : entity}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <MultiSelectFilter 
+                        title="Action"
+                        options={actions}
+                        selectedValues={selectedActions}
+                        onSelectionChange={setSelectedActions}
+                        className="w-full sm:w-[180px]"
+                    />
+                    <MultiSelectFilter 
+                        title="Entity"
+                        options={entities}
+                        selectedValues={selectedEntities}
+                        onSelectionChange={setSelectedEntities}
+                        className="w-full sm:w-[180px]"
+                    />
                     <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'logical'}>
                         {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
                         Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
@@ -958,3 +1031,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
