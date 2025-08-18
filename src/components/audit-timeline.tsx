@@ -499,19 +499,15 @@ const MultiSelectFilter = ({
   title: string;
   className?: string;
 }) => {
-  const handleSelectAll = () => {
-    if (selectedValues.length === options.length) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(options);
-    }
+  const handleSelectAll = (checked: boolean) => {
+    onSelectionChange(checked ? options : []);
   };
 
-  const handleSelect = (value: string) => {
-    if (selectedValues.includes(value)) {
-      onSelectionChange(selectedValues.filter((v) => v !== value));
-    } else {
+  const handleSelect = (value: string, checked: boolean) => {
+    if (checked) {
       onSelectionChange([...selectedValues, value]);
+    } else {
+      onSelectionChange(selectedValues.filter((v) => v !== value));
     }
   };
 
@@ -546,7 +542,7 @@ const MultiSelectFilter = ({
           <DropdownMenuCheckboxItem
             key={option}
             checked={selectedValues.includes(option)}
-            onCheckedChange={() => handleSelect(option)}
+            onCheckedChange={(checked) => handleSelect(option, checked)}
           >
             {option}
           </DropdownMenuCheckboxItem>
