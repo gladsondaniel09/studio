@@ -45,11 +45,19 @@ import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema } from '@/lib/types';
 
 
+// Extend the AuditEvent type to include our pre-processed fields
+type ProcessedAuditEvent = AuditEvent & {
+    parsed_payload: any;
+    parsed_difference_list: any;
+    searchable_text: string;
+};
+
+
 const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, title: string }) => {
     const { toast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
 
-    if (!jsonString) return null;
+    if (!jsonString || jsonString === 'NULL') return null;
 
     let parsedJson;
     try {
@@ -198,28 +206,14 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
     )
 }
 
-const renderDetails = (event: AuditEvent) => {
-    const { action, payload, difference_list } = event;
+const renderDetails = (event: ProcessedAuditEvent) => {
+    const { action, payload, difference_list, parsed_payload, parsed_difference_list } = event;
     const lowerCaseAction = action.toLowerCase();
     
     let formattedView = null;
-    let rawPayload = null;
-    let rawDiffList = null;
-
-    try {
-        if (payload && payload !== 'NULL') rawPayload = JSON.parse(payload);
-    } catch (e) {
-        rawPayload = payload;
-    }
-
-    try {
-        if (difference_list && difference_list !== 'NULL') rawDiffList = JSON.parse(difference_list);
-    } catch(e) {
-        rawDiffList = difference_list;
-    }
     
-    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && rawPayload) {
-        const entries = Object.entries(rawPayload);
+    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && parsed_payload) {
+        const entries = Object.entries(parsed_payload);
         if (entries.length > 0) {
             formattedView = <DetailView items={entries} type="key-value" />;
         } else {
@@ -227,16 +221,16 @@ const renderDetails = (event: AuditEvent) => {
         }
     }
 
-    else if ((lowerCaseAction.includes('update')) && rawDiffList) {
-        if (Array.isArray(rawDiffList) && rawDiffList.length > 0) {
-            formattedView = <DetailView items={rawDiffList} type="diff" />;
+    else if ((lowerCaseAction.includes('update')) && parsed_difference_list) {
+        if (Array.isArray(parsed_difference_list) && parsed_difference_list.length > 0) {
+            formattedView = <DetailView items={parsed_difference_list} type="diff" />;
         } else {
              formattedView = <p className="text-sm mt-4">{difference_list}</p>;
         }
     }
 
-    else if (lowerCaseAction.includes('delete') && rawPayload) {
-         const entries = Object.entries(rawPayload);
+    else if (lowerCaseAction.includes('delete') && parsed_payload) {
+         const entries = Object.entries(parsed_payload);
         if (entries.length > 0) {
             formattedView = <DetailView items={entries} type="key-value" />;
         } else {
@@ -256,7 +250,7 @@ const renderDetails = (event: AuditEvent) => {
             <div className="space-y-4">
                 {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
                 
-                {(rawPayload || rawDiffList) && (
+                {(parsed_payload || parsed_difference_list) && (
                     <Accordion type="single" collapsible className="w-full pt-4">
                         <AccordionItem value="item-1">
                             <AccordionTrigger>
@@ -278,15 +272,14 @@ const renderDetails = (event: AuditEvent) => {
     );
 }
 
-const renderPreview = (event: AuditEvent) => {
-    const { action, payload, difference_list } = event;
+const renderPreview = (event: ProcessedAuditEvent) => {
+    const { action, parsed_payload, parsed_difference_list } = event;
     const lowerCaseAction = action.toLowerCase();
     const PREVIEW_LIMIT = 2;
 
     try {
-        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert') || lowerCaseAction.includes('delete')) && payload && payload !== 'NULL') {
-            const parsedPayload = JSON.parse(payload);
-            const entries = Object.entries(parsedPayload);
+        if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert') || lowerCaseAction.includes('delete')) && parsed_payload) {
+            const entries = Object.entries(parsed_payload);
             if (entries.length > 0) {
                 return (
                     <div className="text-xs mt-2 space-y-1 text-left">
@@ -304,12 +297,11 @@ const renderPreview = (event: AuditEvent) => {
             }
         }
 
-        if (lowerCaseAction.includes('update') && difference_list && difference_list !== 'NULL') {
-            const differences = JSON.parse(difference_list);
-            if (differences.length > 0) {
+        if (lowerCaseAction.includes('update') && parsed_difference_list) {
+            if (Array.isArray(parsed_difference_list) && parsed_difference_list.length > 0) {
                  return (
                     <div className="text-xs mt-2 space-y-1 text-left">
-                        {differences.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
+                        {parsed_difference_list.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
                              <p key={index} className="truncate min-w-0">
                                 <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
                                 <span className="text-muted-foreground line-through">{String(diff.oldValue ?? 'none')}</span>
@@ -317,8 +309,8 @@ const renderPreview = (event: AuditEvent) => {
                                 <span className='text-foreground'>{String(diff.newValue ?? 'none')}</span>
                             </p>
                         ))}
-                        {differences.length > PREVIEW_LIMIT && (
-                            <p className="text-muted-foreground">...and {differences.length - PREVIEW_LIMIT} more changes.</p>
+                        {parsed_difference_list.length > PREVIEW_LIMIT && (
+                            <p className="text-muted-foreground">...and {parsed_difference_list.length - PREVIEW_LIMIT} more changes.</p>
                         )}
                     </div>
                 );
@@ -379,7 +371,7 @@ const getEntitySortKey = (entityName: string): number => {
     return logicalSortOrder.length; // Default for unmatched entities
 };
 
-const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
+const performTopologicalSort = (events: ProcessedAuditEvent[]): ProcessedAuditEvent[] => {
     const indexedEvents = events.map((event, index) => ({ ...event, originalIndex: index }));
     const idToCreatorIndex: Record<string, number> = {};
     const adj: number[][] = Array(events.length).fill(0).map(() => []);
@@ -388,8 +380,7 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
     // First pass: identify creators of all IDs
     indexedEvents.forEach((event, index) => {
         if (event.action.toLowerCase() === 'create') {
-            const data = (event.payload && event.payload !== 'NULL') ? JSON.parse(event.payload) : {};
-            const allIds = extractAllIds(data);
+            const allIds = extractAllIds(event.parsed_payload);
             for (const key in allIds) {
                 // Prioritize specific ID fields, especially the top-level uuid
                 if (key.endsWith('Id') || key.endsWith('uuid')) {
@@ -404,10 +395,7 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
 
     // Second pass: build dependency graph
     indexedEvents.forEach((event, index) => {
-        const payload = (event.payload && event.payload !== 'NULL') ? JSON.parse(event.payload) : {};
-        const diffList = (event.difference_list && event.difference_list !== 'NULL') ? JSON.parse(event.difference_list) : [];
-        const diff = Array.isArray(diffList) ? diffList.reduce((acc, curr) => ({...acc, ...curr}), {}) : {};
-        const allData = { ...event, ...payload, ...diff };
+        const allData = { ...event, ...event.parsed_payload, ...event.parsed_difference_list };
         const allIds = extractAllIds(allData);
 
         for (const key in allIds) {
@@ -461,9 +449,9 @@ const performTopologicalSort = (events: AuditEvent[]): AuditEvent[] => {
 };
 
 // New Hybrid Sort Function
-const performHybridSort = (events: AuditEvent[]): AuditEvent[] => {
+const performHybridSort = (events: ProcessedAuditEvent[]): ProcessedAuditEvent[] => {
     // 1. Group events by high-level business stage
-    const groupedByStage: { [key: number]: AuditEvent[] } = {};
+    const groupedByStage: { [key: number]: ProcessedAuditEvent[] } = {};
     events.forEach(event => {
         const key = getEntitySortKey(event.entity_name);
         if (!groupedByStage[key]) {
@@ -476,7 +464,7 @@ const performHybridSort = (events: AuditEvent[]): AuditEvent[] => {
     const sortedStageKeys = Object.keys(groupedByStage).map(Number).sort((a, b) => a - b);
 
     // 3. Apply topological sort within each stage and flatten
-    const finalSortedEvents: AuditEvent[] = [];
+    const finalSortedEvents: ProcessedAuditEvent[] = [];
     sortedStageKeys.forEach(key => {
         const stageEvents = groupedByStage[key];
         const sortedStageEvents = performTopologicalSort(stageEvents);
@@ -542,7 +530,7 @@ const MultiSelectFilter = ({
           <DropdownMenuCheckboxItem
             key={option}
             checked={selectedValues.includes(option)}
-            onCheckedChange={(checked) => handleSelect(option, checked)}
+            onCheckedChange={(checked) => handleSelect(option, !!checked)}
           >
             {option}
           </DropdownMenuCheckboxItem>
@@ -553,9 +541,68 @@ const MultiSelectFilter = ({
 };
 
 
+// Helper to recursively get all string values from an object
+const getObjectValues = (obj: any): string => {
+  if (!obj) return '';
+  if (typeof obj === 'string') return obj + ' ';
+
+  let values = '';
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      values += getObjectValues(item);
+    }
+  } else if (typeof obj === 'object') {
+    for (const key in obj) {
+      values += getObjectValues(obj[key]);
+    }
+  } else {
+    values = String(obj) + ' ';
+  }
+  return values;
+};
+
+
+// Function to pre-process the raw data from the CSV
+const processAuditData = (events: AuditEvent[]): ProcessedAuditEvent[] => {
+  return events.map(event => {
+    let parsed_payload: any = null;
+    let parsed_difference_list: any = null;
+
+    try {
+      if (event.payload && event.payload !== 'NULL') {
+        parsed_payload = JSON.parse(event.payload);
+      }
+    } catch (e) {
+      // Ignore parsing errors, leave as null
+    }
+
+    try {
+      if (event.difference_list && event.difference_list !== 'NULL') {
+        parsed_difference_list = JSON.parse(event.difference_list);
+      }
+    } catch (e) {
+      // Ignore parsing errors, leave as null
+    }
+
+    // Create a single string for fast searching
+    const eventValues = Object.values(event).join(' ');
+    const payloadValues = getObjectValues(parsed_payload);
+    const diffValues = getObjectValues(parsed_difference_list);
+    const searchable_text = (eventValues + ' ' + payloadValues + ' ' + diffValues).toLowerCase();
+
+    return {
+      ...event,
+      parsed_payload,
+      parsed_difference_list,
+      searchable_text,
+    };
+  });
+};
+
+
 export default function AuditTimeline() {
-  const [data, setData] = useState<AuditEvent[]>([]);
-  const [logicallySortedData, setLogicallySortedData] = useState<AuditEvent[] | null>(null);
+  const [data, setData] = useState<ProcessedAuditEvent[]>([]);
+  const [logicallySortedData, setLogicallySortedData] = useState<ProcessedAuditEvent[] | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'upload' | 'timeline'>('upload');
@@ -663,11 +710,11 @@ export default function AuditTimeline() {
               } else {
                   const validatedData = z.array(SampleEventSchema).safeParse(validData);
                   if (validatedData.success) {
-                    setData(validatedData.data);
+                    setData(processAuditData(validatedData.data));
                   } else {
                     console.error(validatedData.error);
                     setError('CSV data does not match the expected format.');
-                    setData(validData as AuditEvent[]); // Fallback to raw data for display
+                    setData(processAuditData(validData as AuditEvent[])); // Fallback to raw data for display
                   }
                   setView('timeline');
               }
@@ -686,7 +733,7 @@ export default function AuditTimeline() {
       const demoData = await generateDemoData();
       const validatedData = z.array(SampleEventSchema).safeParse(demoData.events);
       if (validatedData.success) {
-        setData(validatedData.data);
+        setData(processAuditData(validatedData.data));
         setView('timeline');
       } else {
         console.error(validatedData.error);
@@ -770,14 +817,6 @@ export default function AuditTimeline() {
 
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
-    const deepSearch = (obj: any): boolean => {
-      if (obj === null || obj === undefined) return false;
-      if (typeof obj !== 'object') {
-        return String(obj).toLowerCase().includes(lowerCaseSearchTerm);
-      }
-      return Object.values(obj).some(value => deepSearch(value));
-    };
-
     let dataToFilter = sourceData.filter(event => {
       if (!event.entity_name) return false;
       const entityName = event.entity_name.toLowerCase();
@@ -797,46 +836,18 @@ export default function AuditTimeline() {
 
       if (!flowMatch || !entityMatch || !actionMatch) return false;
 
-      if (searchTerm === '') {
+      if (!searchTerm) {
         return true;
       }
-
-      // Create a copy of the event to search, without the original payload/diff list to avoid double searching
-      const eventToSearch: any = { ...event };
-      delete eventToSearch.payload;
-      delete eventToSearch.difference_list;
-
-      let searchMatch = deepSearch(eventToSearch);
-
-      if (!searchMatch) {
-        try {
-          if (event.payload && event.payload !== 'NULL') {
-            const parsedPayload = JSON.parse(event.payload);
-            searchMatch = deepSearch(parsedPayload);
-          }
-          if (!searchMatch && event.difference_list && event.difference_list !== 'NULL') {
-            const parsedDiff = JSON.parse(event.difference_list);
-            searchMatch = deepSearch(parsedDiff);
-          }
-        } catch (e) {
-          // Fallback to searching the raw string if JSON parsing fails
-          if (event.payload?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-          if (event.difference_list?.toLowerCase().includes(lowerCaseSearchTerm)) searchMatch = true;
-        }
-      }
-
-      return searchMatch;
+      
+      return event.searchable_text.includes(lowerCaseSearchTerm);
     });
 
     if (sortType === 'timestamp') {
       return [...dataToFilter].sort((a, b) => {
         const dateA = new Date(a.created_timestamp).getTime();
         const dateB = new Date(b.created_timestamp).getTime();
-        if (sortOrder === 'asc') {
-            return dateA - dateB;
-        } else {
-            return dateB - dateA;
-        }
+        return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
       });
     }
     
@@ -864,7 +875,10 @@ export default function AuditTimeline() {
           
           <div className="flex-none flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
                <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
-                  <Eye className="w-8 h-8 text-primary" />
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+                    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
                   Audit Log Timeline
               </h1>
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
@@ -1028,4 +1042,5 @@ export default function AuditTimeline() {
   );
 }
 
+    
     
