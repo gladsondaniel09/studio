@@ -24,7 +24,7 @@ const flowStages = [
   {
     name: 'Cost',
     icon: DollarSign,
-    entities: ['tradecost', 'cost'],
+    entities: ['tradecost', 'cost', 'cashflow'],
   },
   {
     name: 'Container Shipment',
@@ -45,11 +45,6 @@ const flowStages = [
     name: 'Pricing',
     icon: Tag,
     entities: ['pricing', 'price'],
-  },
-   {
-    name: 'Cashflow',
-    icon: DollarSign,
-    entities: ['cashflow'],
   },
   {
     name: 'Commercial Invoice',

@@ -360,12 +360,6 @@ const getEntitySortKey = (entityName: string): number => {
     if (!entityName) return logicalSortOrder.length;
     const lowerEntityName = entityName.toLowerCase();
     
-    // Handle specific cases first to avoid broad matches
-    if (lowerEntityName.includes('plannedobligation')) return 0;
-    if (lowerEntityName.includes('physicalobligationeodrawdata')) return 0;
-    if (lowerEntityName.includes('tradecost')) return 2;
-    if (lowerEntityName.includes('cashflow')) return 2;
-    
     for (let i = 0; i < logicalSortOrder.length; i++) {
         if (logicalSortOrder[i].some(keyword => lowerEntityName.includes(keyword))) {
             return i;
