@@ -477,12 +477,14 @@ const MultiSelectFilter = ({
   selectedValues,
   onSelectionChange,
   title,
+  pluralTitle,
   className,
 }: {
   options: string[];
   selectedValues: string[];
   onSelectionChange: (newSelection: string[]) => void;
   title: string;
+  pluralTitle: string;
   className?: string;
 }) => {
   const handleSelectAll = (checked: boolean) => {
@@ -499,12 +501,12 @@ const MultiSelectFilter = ({
 
   const getButtonText = () => {
     if (selectedValues.length === 0 || selectedValues.length === options.length) {
-        return `All ${title}s`;
+        return `All ${pluralTitle}`;
     }
     if (selectedValues.length === 1) {
         return selectedValues[0];
     }
-    return `${selectedValues.length} ${title}s Selected`;
+    return `${selectedValues.length} ${pluralTitle} Selected`;
   }
 
   return (
@@ -516,7 +518,7 @@ const MultiSelectFilter = ({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56">
-        <DropdownMenuLabel>{title}s</DropdownMenuLabel>
+        <DropdownMenuLabel>{pluralTitle}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           checked={selectedValues.length === options.length}
@@ -902,6 +904,7 @@ export default function AuditTimeline() {
                   <div id="filter-controls" className="contents sm:flex sm:flex-row sm:items-center sm:gap-4 w-full sm:w-auto">
                     <MultiSelectFilter 
                         title="Action"
+                        pluralTitle="Actions"
                         options={actions}
                         selectedValues={selectedActions}
                         onSelectionChange={setSelectedActions}
@@ -909,6 +912,7 @@ export default function AuditTimeline() {
                     />
                     <MultiSelectFilter 
                         title="Entity"
+                        pluralTitle="Entities"
                         options={entities}
                         selectedValues={selectedEntities}
                         onSelectionChange={setSelectedEntities}
