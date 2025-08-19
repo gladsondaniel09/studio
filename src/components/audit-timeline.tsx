@@ -487,17 +487,34 @@ const MultiSelectFilter = ({
   pluralTitle: string;
   className?: string;
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [tempSelectedValues, setTempSelectedValues] = useState(selectedValues);
+
+  useEffect(() => {
+    setTempSelectedValues(selectedValues);
+  }, [selectedValues]);
+
   const handleSelectAll = (checked: boolean) => {
-    onSelectionChange(checked ? options : []);
+    setTempSelectedValues(checked ? options : []);
   };
 
   const handleSelect = (value: string, checked: boolean) => {
     if (checked) {
-      onSelectionChange([...selectedValues, value]);
+        setTempSelectedValues(prev => [...prev, value]);
     } else {
-      onSelectionChange(selectedValues.filter((v) => v !== value));
+        setTempSelectedValues(prev => prev.filter((v) => v !== value));
     }
   };
+
+  const handleApply = () => {
+    onSelectionChange(tempSelectedValues);
+    setIsOpen(false);
+  }
+
+  const handleCancel = () => {
+    setTempSelectedValues(selectedValues);
+    setIsOpen(false);
+  }
 
   const getButtonText = () => {
     if (selectedValues.length === 0 || selectedValues.length === options.length) {
@@ -510,31 +527,38 @@ const MultiSelectFilter = ({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" className={className}>
           {getButtonText()}
           <ChevronDown className="ml-2 h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56">
+      <DropdownMenuContent className="w-56" align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
         <DropdownMenuLabel>{pluralTitle}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
-          checked={selectedValues.length === options.length}
+          checked={tempSelectedValues.length === options.length}
           onCheckedChange={(checked) => handleSelectAll(!!checked)}
+          onSelect={(e) => e.preventDefault()}
         >
           Select All
         </DropdownMenuCheckboxItem>
         {options.map((option) => (
           <DropdownMenuCheckboxItem
             key={option}
-            checked={selectedValues.includes(option)}
+            checked={tempSelectedValues.includes(option)}
             onCheckedChange={(checked) => handleSelect(option, !!checked)}
+            onSelect={(e) => e.preventDefault()}
           >
             {option}
           </DropdownMenuCheckboxItem>
         ))}
+        <DropdownMenuSeparator />
+        <div className="flex justify-end gap-2 p-2">
+            <Button variant="ghost" size="sm" onClick={handleCancel}>Cancel</Button>
+            <Button size="sm" onClick={handleApply}>Apply</Button>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -863,7 +887,7 @@ export default function AuditTimeline() {
     
     return dataToFilter;
 
-  }, [logicallySortedData, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
+  }, [logicallySortedData, data, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
@@ -1065,3 +1089,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
