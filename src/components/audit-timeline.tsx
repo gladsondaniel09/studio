@@ -14,6 +14,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
+import { Progress } from './ui/progress';
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -619,6 +620,9 @@ export default function AuditTimeline() {
   const { toast } = useToast();
   const [showUploadWalkthrough, setShowUploadWalkthrough] = useState(false);
   const [showTimelineWalkthrough, setShowTimelineWalkthrough] = useState(false);
+  const [isProcessingFile, setIsProcessingFile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const progressIntervalRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     // Show upload walkthrough on initial load
@@ -699,11 +703,26 @@ export default function AuditTimeline() {
           setError('Please select a file first.');
           return;
       }
+      setIsProcessingFile(true);
+      setUploadProgress(0);
+
+      progressIntervalRef.current = setInterval(() => {
+        setUploadProgress(prev => {
+            if (prev >= 95) {
+                if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+                return 95;
+            }
+            return prev + 5;
+        })
+      }, 100);
       
       Papa.parse(file, {
           header: true,
           skipEmptyLines: true,
           complete: (results) => {
+              if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+              setUploadProgress(100);
+
               const parsedData = results.data as any[];
               const validData = parsedData.filter(row => row.created_timestamp && row.action);
               if (validData.length === 0) {
@@ -720,10 +739,13 @@ export default function AuditTimeline() {
                   }
                   setView('timeline');
               }
+              setTimeout(() => setIsProcessingFile(false), 500);
           },
           error: (err: any) => {
+              if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
               setError('Failed to parse CSV file: ' + err.message);
               setView('upload');
+              setIsProcessingFile(false);
           }
       });
   };
@@ -1004,11 +1026,22 @@ export default function AuditTimeline() {
                         </div>
                     </label>
 
-                    {fileName && <p className="text-sm font-medium mt-4">Selected file: {fileName}</p>}
+                    {fileName && !isProcessingFile && <p className="text-sm font-medium mt-4">Selected file: {fileName}</p>}
                     
-                    <Button onClick={handleViewTimeline} disabled={!file || !!error} className="w-full mt-4">
-                        <Eye className="mr-2"/>
-                        View Timeline
+                    {isProcessingFile && (
+                        <div className="w-full mt-4 space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Processing: {fileName}</p>
+                            <Progress value={uploadProgress} className="w-full" />
+                        </div>
+                    )}
+
+                    <Button onClick={handleViewTimeline} disabled={!file || !!error || isProcessingFile} className="w-full mt-4">
+                        {isProcessingFile ? (
+                            <Loader className="mr-2 animate-spin" />
+                        ) : (
+                            <Eye className="mr-2" />
+                        )}
+                        {isProcessingFile ? 'Processing...' : 'View Timeline'}
                     </Button>
                 </div>
                 
