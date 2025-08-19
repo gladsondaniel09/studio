@@ -863,7 +863,7 @@ export default function AuditTimeline() {
     
     return dataToFilter;
 
-  }, [logicallySortedData, data, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
+  }, [logicallySortedData, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
@@ -1024,14 +1024,15 @@ export default function AuditTimeline() {
                         </div>
                     </label>
 
-                    {fileName && !isProcessingFile && <p className="text-sm font-medium mt-4">Selected file: {fileName}</p>}
-                    
-                    {isProcessingFile && (
-                        <div className="w-full mt-4 space-y-2">
-                            <p className="text-sm font-medium text-muted-foreground">Processing: {fileName}</p>
-                            <Progress value={uploadProgress} className="w-full" />
-                        </div>
-                    )}
+                    <div className="w-full mt-4 space-y-2">
+                        {fileName && !isProcessingFile && <p className="text-sm font-medium text-center">Selected file: {fileName}</p>}
+                        {isProcessingFile && (
+                            <>
+                                <p className="text-sm font-medium text-muted-foreground">Processing: {fileName}</p>
+                                <Progress value={uploadProgress} className="w-full" />
+                            </>
+                        )}
+                    </div>
 
                     <Button onClick={handleViewTimeline} disabled={!file || !!error || isProcessingFile} className="w-full mt-4">
                         {isProcessingFile ? (
@@ -1064,5 +1065,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
