@@ -61,8 +61,8 @@ const defaultColumns: readonly Column<ProcessedAuditEvent>[] = [
     { key: 'entity_name', name: 'Entity Name', resizable: true, sortable: true, width: 150 },
     { key: 'action', name: 'Action', resizable: true, sortable: true, width: 120 },
     { key: 'user', name: 'User', resizable: true, sortable: true, width: 200, formatter: ({row}) => row.user?.name || 'N/A' },
-    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: true, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.difference_list}</div> },
-    { key: 'payload', name: 'Payload', resizable: true, sortable: true, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.payload}</div> },
+    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: false, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.difference_list}</div> },
+    { key: 'payload', name: 'Payload', resizable: true, sortable: false, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.payload}</div> },
     { key: 'details', name: 'Details', width: 80, resizable: false, formatter: ({row}) => (
         <Dialog>
             <DialogTrigger asChild>
@@ -161,7 +161,17 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
         return data.filter(row => {
             return Object.entries(filters).every(([columnKey, filterValue]) => {
                 if (!filterValue) return true;
-                const rowValue = columnKey === 'user' ? row.user?.name : row[columnKey as keyof ProcessedAuditEvent];
+                let rowValue;
+
+                if (columnKey === 'user') {
+                    rowValue = row.user?.name;
+                } else if (columnKey === 'created_timestamp') {
+                    rowValue = new Date(row.created_timestamp).toLocaleString();
+                } 
+                else {
+                    rowValue = row[columnKey as keyof ProcessedAuditEvent];
+                }
+
                 return String(rowValue).toLowerCase().includes(filterValue.toLowerCase());
             });
         });
@@ -178,10 +188,10 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
     const HeaderRenderer = (props: any) => {
         const columnKey = props.column.key;
         return (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full justify-center gap-1">
                 <div className="font-bold">{props.column.name}</div>
                 <Input
-                    className="h-8 mt-1"
+                    className="h-8 w-full"
                     placeholder="Filter..."
                     value={filters[columnKey] || ''}
                     onChange={e => setFilters(prev => ({...prev, [columnKey]: e.target.value}))}
@@ -194,9 +204,14 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
     const gridColumns = useMemo((): readonly Column<ProcessedAuditEvent>[] => {
         return columns.map(col => ({
             ...col,
-            headerCellClass: 'h-auto py-2',
-            renderHeaderCell: col.key === 'details' ? undefined : (p) => <HeaderRenderer {...p} />,
+            headerCellClass: 'h-auto py-2 bg-muted/50',
+            renderHeaderCell: col.key === 'details' || !col.sortable ? undefined : (p) => <HeaderRenderer {...p} />,
             cellClass: (row) => {
+                let baseClass = 'py-2';
+                if (col.key === 'difference_list' || col.key === 'payload') {
+                    baseClass += ' whitespace-pre-wrap break-words';
+                }
+
                 for (const rule of conditionalFormatRules) {
                     if (!rule.enabled || rule.column !== col.key) continue;
                     
@@ -214,23 +229,27 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                         case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
                     }
                     if(match) {
-                        // This should return a class name string, not a function
-                        return 'custom-cell-style'; 
+                        // This is a bit of a hack, but react-data-grid doesn't have a great way to do this.
+                        // We'll rely on the formatter to apply the style.
+                        return baseClass;
                     }
                 }
-                if (col.key === 'difference_list' || col.key === 'payload') {
-                    return 'py-2 whitespace-pre-wrap break-words';
-                }
-                return 'py-2';
+                return baseClass;
             },
-            // This is a more robust way to apply dynamic styles
             formatter: (props) => {
                 const { row, column } = props;
-
+                const defaultFormatter = col.formatter ? col.formatter(props) : String(props.row[column.key as keyof ProcessedAuditEvent] ?? '');
+                
                 for (const rule of conditionalFormatRules) {
                      if (!rule.enabled || rule.column !== column.key) continue;
                     
-                    const cellValueSource = column.key === 'user' ? row.user?.name : row[rule.column as keyof ProcessedAuditEvent];
+                    let cellValueSource = row[rule.column as keyof ProcessedAuditEvent];
+                    if (column.key === 'user') {
+                        cellValueSource = row.user?.name;
+                    } else if (column.key === 'created_timestamp') {
+                        cellValueSource = new Date(row.created_timestamp).toLocaleString();
+                    }
+
                     const cellValue = String(cellValueSource ?? '').toLowerCase();
                     const ruleValue = rule.value.toLowerCase();
 
@@ -245,12 +264,11 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                     }
 
                     if (match) {
-                        return <div style={{ backgroundColor: rule.color, color: '#000' }}>{col.formatter ? col.formatter(props) : props.row[column.key as keyof ProcessedAuditEvent]}</div>;
+                        return <div style={{ backgroundColor: rule.color, color: 'hsl(var(--foreground))', padding: '0 4px', height: '100%', display: 'flex', alignItems: 'center' }}>{defaultFormatter}</div>;
                     }
                 }
                 
-                // Default formatter rendering
-                return col.formatter ? col.formatter(props) : props.row[column.key as keyof ProcessedAuditEvent];
+                return defaultFormatter;
             }
         }));
     }, [columns, filters, conditionalFormatRules]);
@@ -269,10 +287,11 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                     sortColumns={sortColumns}
                     onSortColumnsChange={setSortColumns}
                     onColumnsChange={setColumns}
-                    headerRowHeight={70}
+                    headerRowHeight={80}
                     rowHeight={55}
                 />
             </div>
         </div>
     );
-}
+
+    
