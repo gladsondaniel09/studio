@@ -1,9 +1,9 @@
 import {genkit} from 'genkit';
-import {openai} from 'genkitx-openai';
+import {openAI} from 'genkitx-openai';
 
 export const ai = genkit({
   plugins: [
-    openai({
+    openAI({
       apiKey: process.env.PERPLEXITY_API_KEY,
       apiHost: 'https://api.perplexity.ai',
     }),
