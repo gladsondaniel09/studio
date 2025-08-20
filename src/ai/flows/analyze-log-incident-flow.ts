@@ -7,27 +7,49 @@ import {
   type IncidentAnalysisOutput,
 } from '@/lib/types';
 
+// Temporary debug helper - logs to server console and returns safe error
+function logAndThrowSafe(error: any, context: string) {
+  const errorInfo = {
+    context,
+    message: error?.message || 'Unknown error',
+    name: error?.name,
+    stack: error?.stack?.split('\n')[0], // Just first line
+    timestamp: new Date().toISOString()
+  };
+  
+  // This will show in your production server logs
+  console.error('[INCIDENT_ANALYSIS_ERROR]', JSON.stringify(errorInfo));
+  
+  // Throw a safe error for the client
+  throw new Error(`Analysis failed at ${context}. Check server logs for details.`);
+}
+
 export async function analyzeLogIncident(
   input: IncidentAnalysisInput
 ): Promise<IncidentAnalysisOutput> {
   
-  // Validate input
-  if (!input?.logs?.trim()) {
-    throw new Error('logs is required and cannot be empty.');
-  }
+  try {
+    // Step 1: Input validation
+    if (!input?.logs?.trim()) {
+      logAndThrowSafe(new Error('Empty logs'), 'input_validation');
+    }
 
-  // Check API key
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    throw new Error('PERPLEXITY_API_KEY environment variable is not set');
-  }
+    // Step 2: Environment check
+    const apiKey = process.env.PERPLEXITY_API_KEY;
+    if (!apiKey) {
+      logAndThrowSafe(new Error('API key missing'), 'env_check');
+    }
 
-  // Truncate logs if too long
-  const logs = input.logs.length > 15000 
-    ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
-    : input.logs;
+    // Step 3: Prepare request
+    const logs = input.logs.length > 15000 
+      ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
+      : input.logs;
 
-  const prompt = `You are a senior QA engineer for a CTRM/ETRM platform. Your task is to analyze a stream of audit logs to identify a potential bug or unexpected system behavior.
+    const requestBody = {
+      model: 'sonar',
+      messages: [{
+        role: 'user',
+        content: `You are a senior QA engineer for a CTRM/ETRM platform. Your task is to analyze a stream of audit logs to identify a potential bug or unexpected system behavior.
 
 From the logs, you must deduce:
 1.  A concise title for the issue.
@@ -61,73 +83,81 @@ Example of a PERFECT response format:
 Return ONLY the JSON object. No markdown, no code blocks, no extra text.
 
 Logs to analyze:
-${logs}`;
+${logs}`
+      }],
+      temperature: 0.2,
+      max_tokens: 1200
+    };
 
-  try {
-    // Direct API call
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar-pro', // Use a powerful model for this task
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 1200
-      })
-    });
-
-    // Check HTTP status
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Perplexity API returned ${response.status}: ${errorText}`);
+    // Step 4: API call
+    let response: Response | undefined;
+    try {
+      response = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (fetchError) {
+      logAndThrowSafe(fetchError, 'api_fetch');
     }
 
-    // Parse response
-    const data = await response.json();
-    
-    if (!data.choices || !data.choices[0]) {
-      throw new Error(`Invalid API response structure: ${JSON.stringify(data)}`);
+    // Step 5: Response check
+    if (!response!.ok) {
+      try {
+        const errorText = await response!.text();
+        logAndThrowSafe(new Error(`API ${response!.status}: ${errorText}`), 'api_response');
+      } catch {
+        logAndThrowSafe(new Error(`API ${response!.status}: Unable to read error`), 'api_response');
+      }
     }
 
-    const message = data.choices[0].message;
-    if (!message || !message.content) {
-      throw new Error('No content in API response');
+    // Step 6: JSON parsing
+    let data;
+    try {
+      data = await response!.json();
+    } catch (jsonError) {
+      logAndThrowSafe(jsonError, 'response_json_parse');
     }
-    const content = message.content;
 
+    // Step 7: Extract content
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content) {
+      logAndThrowSafe(new Error(`No content in response: ${JSON.stringify(data)}`), 'content_extraction');
+    }
 
-    // Clean and parse JSON
-    const cleanContent = content.trim()
-      .replace(/^```json/i, '')
-      .replace(/```$/i, '')
-      .trim();
-
+    // Step 8: Clean and parse content
     let parsed;
     try {
+      const cleanContent = content!.trim()
+        .replace(/^```json/i, '')
+        .replace(/```$/i, '')
+        .trim();
       parsed = JSON.parse(cleanContent);
-    } catch (parseError: any) {
-      throw new Error(`Failed to parse JSON response. Content: ${cleanContent.slice(0, 500)}. Parse error: ${parseError.message}`);
+    } catch (parseError) {
+      logAndThrowSafe(new Error(`Parse failed. Content: ${content!.slice(0, 200)}`), 'content_parse');
     }
 
-    // Validate with Zod
+    // Step 9: Schema validation
     try {
-      const validated = IncidentAnalysisOutputSchema.parse(parsed);
-      return validated;
+      return IncidentAnalysisOutputSchema.parse(parsed);
     } catch (zodError: any) {
-      const issues = zodError.issues?.map((i: any) => `${i.path.join('.')}: ${i.message}`).join(', ');
-      throw new Error(`Schema validation failed. Issues: ${issues}. Data: ${JSON.stringify(parsed)}`);
+      const issues = zodError.issues?.map((i: any) => `${i.path.join('.')}: ${i.message}`).join(', ') || 'Unknown validation error';
+      logAndThrowSafe(new Error(`Schema validation: ${issues}`), 'schema_validation');
     }
 
-  } catch (error: any) {
-    // Re-throw the actual error message - NO generic message
-    throw error;
+  } catch (error) {
+    // If it's already our safe error, re-throw
+    if (error instanceof Error && error.message.includes('Check server logs')) {
+      throw error;
+    }
+    // Otherwise, log and make safe
+    logAndThrowSafe(error, 'unexpected');
   }
+  
+  // This line should not be reachable if all paths throw an error on failure.
+  // Adding it to satisfy TypeScript's return type requirement.
+  throw new Error('Reached end of function without returning a value. This should not happen.');
 }
