@@ -214,18 +214,43 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                         case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
                     }
                     if(match) {
-                        return (row) => {
-                            return {
-                                backgroundColor: rule.color,
-                                color: '#000000', // A simple contrast logic might be needed here
-                            };
-                        };
+                        // This should return a class name string, not a function
+                        return 'custom-cell-style'; 
                     }
                 }
                 if (col.key === 'difference_list' || col.key === 'payload') {
                     return 'py-2 whitespace-pre-wrap break-words';
                 }
                 return 'py-2';
+            },
+            // This is a more robust way to apply dynamic styles
+            formatter: (props) => {
+                const { row, column } = props;
+
+                for (const rule of conditionalFormatRules) {
+                     if (!rule.enabled || rule.column !== column.key) continue;
+                    
+                    const cellValueSource = column.key === 'user' ? row.user?.name : row[rule.column as keyof ProcessedAuditEvent];
+                    const cellValue = String(cellValueSource ?? '').toLowerCase();
+                    const ruleValue = rule.value.toLowerCase();
+
+                    let match = false;
+                    switch(rule.condition) {
+                        case 'equals': if(cellValue === ruleValue) match = true; break;
+                        case 'not_equals': if(cellValue !== ruleValue) match = true; break;
+                        case 'contains': if(cellValue.includes(ruleValue)) match = true; break;
+                        case 'not_contains': if(!cellValue.includes(ruleValue)) match = true; break;
+                        case 'starts_with': if(cellValue.startsWith(ruleValue)) match = true; break;
+                        case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
+                    }
+
+                    if (match) {
+                        return <div style={{ backgroundColor: rule.color, color: '#000' }}>{col.formatter ? col.formatter(props) : props.row[column.key as keyof ProcessedAuditEvent]}</div>;
+                    }
+                }
+                
+                // Default formatter rendering
+                return col.formatter ? col.formatter(props) : props.row[column.key as keyof ProcessedAuditEvent];
             }
         }));
     }, [columns, filters, conditionalFormatRules]);
@@ -236,7 +261,7 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
             <div className="flex-none">
                 <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns.filter(c => !['details', 'user', 'difference_list', 'payload'].includes(c.key))} />
             </div>
-            <div className="flex-grow min-h-0">
+            <div className="flex-grow min-h-0 border rounded-md overflow-hidden">
                 <DataGrid
                     className="rdg-light h-full w-full"
                     columns={gridColumns}
