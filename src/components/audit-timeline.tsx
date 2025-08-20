@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -9,9 +7,9 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Share2 } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Share2, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2 } from 'lucide-react';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
@@ -27,7 +25,6 @@ import {
     DialogContent,
     DialogHeader,
     DialogTitle,
-    DialogTrigger,
 } from "@/components/ui/dialog"
 import {
     Accordion,
@@ -510,39 +507,39 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     return (
         <Card className="mt-4">
             <CardHeader>
-                <CardTitle className="flex justify-between items-start">
-                    <span>AI Incident Analysis</span>
-                    <span className="text-sm font-medium text-muted-foreground">
-                        Confidence: {(result.confidence * 100).toFixed(0)}%
+                <CardTitle className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Info className="w-5 h-5 text-primary" />
                     </span>
+                    <span className="flex-grow">{result.title}</span>
                 </CardTitle>
+                <CardDescription className="pl-11">
+                    {result.summary}
+                </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 text-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><strong>Severity:</strong> <span className="font-mono bg-muted p-1 rounded">{result.severity}</span></div>
-                    <div><strong>Suspected Component:</strong> <span className="font-mono bg-muted p-1 rounded">{result.suspected_component}</span></div>
+            <CardContent className="space-y-6 text-sm pl-11">
+                <div>
+                    <h4 className="font-semibold flex items-center gap-2 mb-2">
+                        <ListOrdered className="w-4 h-4 text-muted-foreground" />
+                        Steps to Replicate
+                    </h4>
+                    <ol className="list-decimal list-outside pl-5 space-y-1.5 marker:text-muted-foreground">
+                        {result.steps_to_replicate.map((step, i) => <li key={i} className="pl-2">{step}</li>)}
+                    </ol>
                 </div>
                 <div>
-                    <strong>Error Signature:</strong>
-                    <p className="font-mono bg-muted p-2 rounded text-xs">{result.error_signature}</p>
+                    <h4 className="font-semibold flex items-center gap-2 mb-2">
+                        <AlertCircle className="w-4 h-4 text-muted-foreground" />
+                        Observed Behavior
+                    </h4>
+                    <p>{result.observed_behavior}</p>
                 </div>
                 <div>
-                    <strong>Impacted Entities:</strong>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                        {result.impacted_entities.map((entity, i) => <span key={i} className="bg-muted px-2 py-1 rounded-full text-xs">{entity}</span>)}
-                    </div>
-                </div>
-                <div>
-                    <strong>Probable Causes:</strong>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                        {result.probable_causes.map((cause, i) => <li key={i}>{cause}</li>)}
-                    </ul>
-                </div>
-                <div>
-                    <strong>Recommended Steps:</strong>
-                     <ul className="list-decimal pl-5 mt-1 space-y-1">
-                        {result.recommended_steps.map((step, i) => <li key={i}>{step}</li>)}
-                    </ul>
+                    <h4 className="font-semibold flex items-center gap-2 mb-2">
+                       <TestTube2 className="w-4 h-4 text-muted-foreground" />
+                        Potential Cause
+                    </h4>
+                    <p className="font-mono bg-muted p-2 rounded text-xs">{result.potential_cause}</p>
                 </div>
 
                 <Accordion type="single" collapsible className="w-full pt-4">
@@ -553,7 +550,7 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                           <RawJsonViewer jsonString={JSON.stringify(result)} title="AI Response" />
+                           <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Response" />
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
@@ -874,7 +871,7 @@ export default function AuditTimeline() {
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-3xl w-full h-auto max-h-[90vh]">
                     <DialogHeader>
-                        <DialogTitle>Log Analysis</DialogTitle>
+                        <DialogTitle>AI-Generated Bug Report</DialogTitle>
                     </DialogHeader>
                     <div className="overflow-y-auto">
                         {isAnalyzing && (

@@ -41,21 +41,12 @@ export const IncidentAnalysisInputSchema = z.object({
 });
 export type IncidentAnalysisInput = z.infer<typeof IncidentAnalysisInputSchema>;
 
-const ISOish = z.string().refine((v) => !isNaN(Date.parse(v)), {
-    message: "Invalid date format, expected a string parseable by Date.parse()",
-});
 
 export const IncidentAnalysisOutputSchema = z.object({
-    severity: z.string().describe("The overall severity of the incident (e.g., 'High', 'Medium', 'Low')."),
-    suspected_component: z.string().describe('The application component most likely causing the issue.'),
-    error_signature: z.string().describe('A unique, concise signature or hash for the primary error.'),
-    time_range: z.object({
-        start: ISOish.describe('The start timestamp of the incident.'),
-        end: ISOish.describe('The end timestamp of the incident.'),
-    }).describe('The time range of the incident.'),
-    impacted_entities: z.array(z.string()).describe('A list of entities (trades, books, jobs, users) impacted by the incident.'),
-    probable_causes: z.array(z.string()).describe('A list of probable root causes for the incident.'),
-    recommended_steps: z.array(z.string()).describe('A list of actionable steps to mitigate or resolve the incident.'),
-    confidence: z.number().min(0).max(1).describe('The confidence level of the analysis, from 0.0 to 1.0.'),
+    title: z.string().describe("A concise title for the identified issue."),
+    summary: z.string().describe("A brief summary of the problem."),
+    steps_to_replicate: z.array(z.string()).describe("A list of steps to replicate the issue."),
+    observed_behavior: z.string().describe("A description of the incorrect behavior that was observed."),
+    potential_cause: z.string().describe("The likely technical cause of the issue."),
 });
 export type IncidentAnalysisOutput = z.infer<typeof IncidentAnalysisOutputSchema>;
