@@ -20,7 +20,7 @@ export async function generateDemoData(): Promise<DemoDataOutput> {
 const prompt = ai.definePrompt({
   name: 'generateDemoDataPrompt',
   output: { schema: DemoDataOutputSchema },
-  model: 'sonar',
+  model: 'sonar-pro',
   prompt: `System:
 You are an expert at creating realistic synthetic audit log events for a CTRM/ETRM application's audit viewer.
 Return ONLY a valid JSON object that matches the required schema. Do not include markdown, code fences, or commentary.

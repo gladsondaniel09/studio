@@ -23,7 +23,7 @@ const prompt = ai.definePrompt({
   name: 'analyzeLogIncidentPrompt',
   input: { schema: IncidentAnalysisInputSchema },
   output: { schema: IncidentAnalysisOutputSchema },
-  model: 'sonar',
+  model: 'sonar-pro',
   // Keep the “system” guidance up front and make the model return only JSON.
   prompt: `System:
 You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
