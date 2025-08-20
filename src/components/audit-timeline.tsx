@@ -924,73 +924,72 @@ export default function AuditTimeline() {
             isOpen={showTimelineWalkthrough}
             onClose={() => setShowTimelineWalkthrough(false)}
           />
-          <header className="flex-none flex justify-between items-start mb-8">
-              <div className="w-full" id="flow-chart-card">
-                  <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
-              </div>
-              <div className="flex-shrink-0 ml-4">
-                  <ThemeToggle />
-              </div>
-          </header>
-          
-          <div className="flex-none flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
-               <h1 className="text-2xl font-bold font-headline text-foreground flex items-center gap-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+          <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
+              <div className='flex items-center gap-3'>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
                     <circle cx="12" cy="12" r="3"/>
                   </svg>
-                  Audit Log Explorer
-              </h1>
-              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
-                   <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
-                        <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}>
-                            <List className="mr-2 h-4 w-4" />
-                            Timeline
-                        </Button>
-                        <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}>
-                            <TableIcon className="mr-2 h-4 w-4" />
-                            Table
-                        </Button>
-                    </div>
-                  <div className="relative w-full sm:w-auto" id="search-bar">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                          placeholder="Search logs..."
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                          className="pl-10 w-full sm:w-64"
-                      />
-                  </div>
-                  <div id="filter-controls" className="contents sm:flex sm:flex-row sm:items-center sm:gap-4 w-full sm:w-auto">
-                    <MultiSelectFilter 
-                        title="Action"
-                        pluralTitle="Actions"
-                        options={allActions}
-                        selectedValues={selectedActions}
-                        onSelectionChange={setSelectedActions}
-                        className="w-full sm:w-[180px]"
-                    />
-                    <MultiSelectFilter 
-                        title="Entity"
-                        pluralTitle="Entities"
-                        options={allEntities}
-                        selectedValues={selectedEntities}
-                        onSelectionChange={setSelectedEntities}
-                        className="w-full sm:w-[180px]"
-                    />
-                    <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'logical'}>
-                        {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
-                        Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
-                    </Button>
-                    <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={() => setSortType(type => type === 'logical' ? 'timestamp' : 'logical')} className="w-full sm:w-auto" disabled>
-                        <Wand2 className="mr-2 h-4 w-4" />
-                        Magic Sort
-                    </Button>
-                  </div>
-                  <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
+                  <h1 className="text-2xl font-bold font-headline text-foreground">
+                    Audit Log Explorer
+                  </h1>
               </div>
+              <div className="flex-shrink-0">
+                  <ThemeToggle />
+              </div>
+          </header>
+            <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
+                 <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+            </div>
+          
+          <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
+                <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
+                    <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}>
+                        <List className="mr-2 h-4 w-4" />
+                        Timeline
+                    </Button>
+                    <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}>
+                        <TableIcon className="mr-2 h-4 w-4" />
+                        Table
+                    </Button>
+                </div>
+                <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                        placeholder="Search logs..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 w-full sm:w-64"
+                    />
+                </div>
+                <MultiSelectFilter 
+                    title="Action"
+                    pluralTitle="Actions"
+                    options={allActions}
+                    selectedValues={selectedActions}
+                    onSelectionChange={setSelectedActions}
+                    className="w-full sm:w-[180px]"
+                />
+                <MultiSelectFilter 
+                    title="Entity"
+                    pluralTitle="Entities"
+                    options={allEntities}
+                    selectedValues={selectedEntities}
+                    onSelectionChange={setSelectedEntities}
+                    className="w-full sm:w-[180px]"
+                />
+                <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'logical'}>
+                    {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                    Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
+                </Button>
+                <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={() => setSortType(type => type === 'logical' ? 'timestamp' : 'logical')} className="w-full sm:w-auto" disabled>
+                    <Wand2 className="mr-2 h-4 w-4" />
+                    Magic Sort
+                </Button>
+                <div className="flex-grow"></div>
+                <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>
-          <div className='flex-grow min-h-0 flex flex-col gap-4'>
+          <div className='flex-grow min-h-0 flex flex-col gap-4 px-4 md:px-8 pb-4'>
             {activeView === 'timeline' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
