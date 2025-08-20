@@ -43,6 +43,7 @@ import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema } from '@/lib/types';
 import AuditTable from './audit-table';
+import { format } from 'date-fns';
 
 
 // Extend the AuditEvent type to include our pre-processed fields
