@@ -20,14 +20,6 @@ interface AuditTableProps {
   data: ProcessedAuditEvent[];
 }
 
-const getRowColorClass = (action: string) => {
-  const lowerAction = action.toLowerCase();
-  if (lowerAction.includes('create')) return 'bg-green-100/60 dark:bg-green-900/40 hover:bg-green-100/80 dark:hover:bg-green-900/60';
-  if (lowerAction.includes('update')) return 'bg-yellow-100/60 dark:bg-yellow-900/40 hover:bg-yellow-100/80 dark:hover:bg-yellow-900/60';
-  if (lowerAction.includes('delete')) return 'bg-red-100/60 dark:bg-red-900/40 hover:bg-red-100/80 dark:hover:bg-red-900/60';
-  return 'bg-card';
-};
-
 const TruncatedCell = ({ text }: { text: string | undefined }) => {
     const displayText = text || 'NULL';
     return (
@@ -53,7 +45,7 @@ export default function AuditTable({ data }: AuditTableProps) {
         </TableHeader>
         <TableBody>
             {data.map((event, index) => (
-            <TableRow key={index} className={cn(getRowColorClass(event.action))}>
+            <TableRow key={index}>
                 <TableCell className="font-medium">
                     {new Date(event.created_timestamp).toLocaleString()}
                 </TableCell>
