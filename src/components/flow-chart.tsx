@@ -82,7 +82,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
   return (
     <div className="w-full">
         <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2">
                 <div className="flex items-center justify-between">
                 {flowStages.map((stage, index) => (
                     <div key={stage.name} className="flex items-center w-full">
@@ -90,32 +90,29 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         variant="ghost"
                         onClick={() => onStageClick(stage.entities)}
                         className={cn(
-                            'flex flex-col items-center text-center gap-2 w-full h-auto p-2 rounded-md transition-all',
+                            'flex flex-col items-center text-center gap-1 w-full h-auto p-1 rounded-md transition-all',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
-                                ? 'bg-primary/20 border-primary border'
-                                : '',
-                            activeStages.has(stage.name)
-                                ? 'text-primary'
-                                : 'text-muted-foreground/70'
+                                ? 'bg-primary/20'
+                                : ''
                         )}
                     >
                         <div
                         className={cn(
-                            'flex items-center justify-center w-12 h-12 rounded-full border-2 transition-all',
+                            'flex items-center justify-center w-8 h-8 rounded-full border transition-all',
                             activeStages.has(stage.name)
-                            ? 'bg-primary/10 border-primary'
-                            : 'bg-muted border-border',
+                            ? 'bg-primary/10 border-primary text-primary'
+                            : 'bg-muted border-border text-muted-foreground',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20'
                                 : ''
                         )}
                         >
-                        <stage.icon className="w-6 h-6" />
+                        <stage.icon className="w-4 h-4" />
                         </div>
-                        <p className="text-xs font-bold font-headline text-foreground">{stage.name}</p>
+                        <p className="text-[10px] font-bold font-headline text-foreground">{stage.name}</p>
                     </Button>
                     {index < flowStages.length - 1 && (
-                        <ChevronRight className="w-8 h-8 text-muted-foreground/50 mx-2 hidden sm:block" />
+                        <ChevronRight className="w-6 h-6 text-muted-foreground/50 mx-1 hidden sm:block" />
                     )}
                     </div>
                 ))}
