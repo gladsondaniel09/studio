@@ -327,152 +327,6 @@ const renderPreview = (event: ProcessedAuditEvent) => {
     return <p className="text-sm mt-2 text-muted-foreground">Click the expand icon for full details.</p>;
 }
 
-
-// Extracts all key-value pairs from a nested object
-const extractAllIds = (obj: any, prefix = ''): Record<string, any> => {
-    if (obj === null || typeof obj !== 'object') {
-        return {};
-    }
-    return Object.entries(obj).reduce((acc, [key, value]) => {
-        const newKey = prefix ? `${prefix}.${key}` : key;
-        if (value !== null && value !== '' && (typeof value === 'string' || typeof value === 'number')) {
-            // Normalize ID keys to 'uuid' for consistent matching
-            const normalizedKey = key.toLowerCase().endsWith('id') ? 'uuid' : key;
-            acc[newKey] = value;
-        } else if (typeof value === 'object') {
-            Object.assign(acc, extractAllIds(value, newKey));
-        }
-        return acc;
-    }, {} as Record<string, any>);
-};
-
-const logicalSortOrder = [
-    ['plannedobligation', 'physicalobligationeodrawdata'], // Stage 0
-    ['trade'], // Stage 1
-    ['tradecost', 'cost', 'cashflow'], // Stage 2
-    ['shipment', 'container'], // Stage 3
-    ['stock', 'movement'], // Stage 4
-    ['actualization', 'actualizedquantityobligation'], // Stage 5
-    ['pricing', 'price'], // Stage 6
-    ['invoice'], // Stage 7
-];
-
-const getEntitySortKey = (entityName: string): number => {
-    if (!entityName) return logicalSortOrder.length;
-    const lowerEntityName = entityName.toLowerCase();
-    
-    for (let i = 0; i < logicalSortOrder.length; i++) {
-        if (logicalSortOrder[i].some(keyword => lowerEntityName.includes(keyword))) {
-            return i;
-        }
-    }
-    return logicalSortOrder.length; // Default for unmatched entities
-};
-
-const performTopologicalSort = (events: ProcessedAuditEvent[]): ProcessedAuditEvent[] => {
-    if (events.length <= 1) return events;
-
-    const indexedEvents = events.map((event, index) => ({ ...event, originalIndex: index }));
-    const idToCreatorIndex: Record<string, number> = {};
-    const adj: number[][] = Array(events.length).fill(0).map(() => []);
-    const inDegree: number[] = Array(events.length).fill(0);
-
-    // First pass: identify creators of all IDs
-    indexedEvents.forEach((event, index) => {
-        if (event.action.toLowerCase() === 'create' && event.parsed_payload) {
-            const allIds = extractAllIds(event.parsed_payload);
-            for (const key in allIds) {
-                if (key.endsWith('uuid') || key.endsWith('Id') || key === 'tradeId') {
-                     const idValue = `${key}=${allIds[key]}`;
-                     if (!idToCreatorIndex.hasOwnProperty(idValue)) {
-                        idToCreatorIndex[idValue] = index;
-                    }
-                }
-            }
-        }
-    });
-
-    // Second pass: build dependency graph
-    indexedEvents.forEach((event, index) => {
-        const allData = { ...event.parsed_payload, ...event.parsed_difference_list };
-        const allIds = extractAllIds(allData);
-
-        for (const key in allIds) {
-            if (key.endsWith('uuid') || key.endsWith('Id') || key === 'tradeId') {
-                const idValue = `${key}=${allIds[key]}`;
-                const creatorIndex = idToCreatorIndex[idValue];
-
-                if (creatorIndex !== undefined && creatorIndex !== index) {
-                    adj[creatorIndex].push(index);
-                    inDegree[index]++;
-                }
-            }
-        }
-    });
-
-    // Perform topological sort
-    const queue: number[] = [];
-    for (let i = 0; i < events.length; i++) {
-        if (inDegree[i] === 0) {
-            queue.push(i);
-        }
-    }
-
-    const sortedIndices: number[] = [];
-    while (queue.length > 0) {
-        const u = queue.shift()!;
-        sortedIndices.push(u);
-
-        for (const v of adj[u]) {
-            inDegree[v]--;
-            if (inDegree[v] === 0) {
-                queue.push(v);
-            }
-        }
-    }
-    
-    // If there's a cycle, the sort won't include all events.
-    // In that case, append the remaining ones, sorted by timestamp.
-    if (sortedIndices.length < events.length) {
-        const remainingIndices = events
-            .map((_, i) => i)
-            .filter(i => !sortedIndices.includes(i));
-        
-        remainingIndices.sort((a,b) => new Date(events[a].created_timestamp).getTime() - new Date(events[b].created_timestamp).getTime());
-
-        return [...sortedIndices, ...remainingIndices].map(i => indexedEvents.find(e => e.originalIndex === i)!);
-    }
-
-    return sortedIndices.map(i => indexedEvents.find(e => e.originalIndex === i)!);
-};
-
-
-// New Hybrid Sort Function
-const performHybridSort = (events: ProcessedAuditEvent[]): ProcessedAuditEvent[] => {
-    // 1. Group events by high-level business stage
-    const groupedByStage: { [key: number]: ProcessedAuditEvent[] } = {};
-    events.forEach(event => {
-        const key = getEntitySortKey(event.entity_name);
-        if (!groupedByStage[key]) {
-            groupedByStage[key] = [];
-        }
-        groupedByStage[key].push(event);
-    });
-
-    // 2. Sort the stage keys
-    const sortedStageKeys = Object.keys(groupedByStage).map(Number).sort((a, b) => a - b);
-
-    // 3. Apply topological sort within each stage and flatten
-    const finalSortedEvents: ProcessedAuditEvent[] = [];
-    sortedStageKeys.forEach(key => {
-        const stageEvents = groupedByStage[key];
-        const sortedStageEvents = performTopologicalSort(stageEvents);
-        finalSortedEvents.push(...sortedStageEvents);
-    });
-    
-    return finalSortedEvents;
-}
-
 const MultiSelectFilter = ({
   options,
   selectedValues,
@@ -659,7 +513,6 @@ export default function AuditTimeline() {
   const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [sortType, setSortType] = useState<'timestamp' | 'logical'>('timestamp');
   const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
@@ -837,7 +690,6 @@ export default function AuditTimeline() {
     setSelectedEntities([]);
     setSelectedActions([]);
     setSortOrder('desc');
-    setSortType('timestamp');
     setSelectedFlowEntities(null);
   }
   
@@ -863,20 +715,11 @@ export default function AuditTimeline() {
         setSelectedActions(allActions);
     }
   }, [data, allEntities, allActions]);
-  
-  // Perform the expensive logical sort only when the base data changes
-  const logicallySortedData = useMemo(() => {
-    if (data.length === 0) return [];
-    return performHybridSort(data);
-  }, [data]);
-
 
   const filteredData = useMemo(() => {
-    let sourceData = sortType === 'logical' ? logicallySortedData : data;
-
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
 
-    let dataToFilter = sourceData.filter(event => {
+    let dataToFilter = data.filter(event => {
       if (!event.entity_name) return false;
       const entityName = event.entity_name.toLowerCase();
       let flowMatch = !selectedFlowEntities;
@@ -902,18 +745,14 @@ export default function AuditTimeline() {
       return event.searchable_text.includes(lowerCaseSearchTerm);
     });
 
-    if (sortType === 'timestamp') {
-      return [...dataToFilter].sort((a, b) => {
-        const dateA = new Date(a.created_timestamp).getTime();
-        const dateB = new Date(b.created_timestamp).getTime();
-        if (isNaN(dateA) || isNaN(dateB)) return 0;
-        return sortOrder === 'asc' ? dateA - dateB : dateB - a;
-      });
-    }
-    
-    return dataToFilter;
+    return [...dataToFilter].sort((a, b) => {
+      const dateA = new Date(a.created_timestamp).getTime();
+      const dateB = new Date(b.created_timestamp).getTime();
+      if (isNaN(dateA) || isNaN(dateB)) return 0;
+      return sortOrder === 'asc' ? dateA - dateB : dateB - a;
+    });
 
-  }, [logicallySortedData, data, searchTerm, selectedEntities, selectedActions, sortOrder, sortType, selectedFlowEntities]);
+  }, [data, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities]);
 
 
   if (view === 'timeline') {
@@ -939,7 +778,7 @@ export default function AuditTimeline() {
               </div>
           </header>
             <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
-                 <FlowChart data={filteredData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+                 <FlowChart data={data} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
             </div>
           
           <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
@@ -978,11 +817,11 @@ export default function AuditTimeline() {
                     onSelectionChange={setSelectedEntities}
                     className="w-full sm:w-[180px]"
                 />
-                <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto" disabled={sortType === 'logical'}>
+                <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
                     {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
                     Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
                 </Button>
-                <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={() => setSortType(type => type === 'logical' ? 'timestamp' : 'logical')} className="w-full sm:w-auto" disabled>
+                <Button variant='outline' className="w-full sm:w-auto" disabled>
                     <Wand2 className="mr-2 h-4 w-4" />
                     Magic Sort
                 </Button>
