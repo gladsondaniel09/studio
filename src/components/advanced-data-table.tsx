@@ -2,13 +2,13 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import DataGrid, { textEditor, SelectCellFormatter } from 'react-data-grid';
+import DataGrid from 'react-data-grid';
 import type { Column, SortColumn } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent, renderDetails } from './audit-timeline';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Trash2, Plus, Wand2, Filter } from 'lucide-react';
+import { Trash2, Plus, Wand2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
@@ -25,15 +25,18 @@ function getComparator(sortColumn: string): Comparator {
             return (a, b) => new Date(a.created_timestamp).getTime() - new Date(b.created_timestamp).getTime();
         case 'entity_name':
         case 'action':
-        case 'difference_list':
-        case 'payload':
+        case 'user':
             return (a, b) => {
                 const valA = a[sortColumn as keyof ProcessedAuditEvent] || '';
                 const valB = b[sortColumn as keyof ProcessedAuditEvent] || '';
                 return String(valA).localeCompare(String(valB));
             };
         default:
-            return (a, b) => 0;
+             return (a, b) => {
+                const valA = a[sortColumn as keyof ProcessedAuditEvent] ?? '';
+                const valB = b[sortColumn as keyof ProcessedAuditEvent] ?? '';
+                return String(valA).localeCompare(String(valB));
+            };
     }
 }
 
@@ -50,10 +53,11 @@ interface ConditionalFormatRule {
 
 const defaultColumns: readonly Column<ProcessedAuditEvent>[] = [
     { key: 'created_timestamp', name: 'Timestamp', resizable: true, sortable: true, width: 200, formatter: ({row}) => new Date(row.created_timestamp).toLocaleString() },
-    { key: 'entity_name', name: 'Entity Name', resizable: true, sortable: true },
+    { key: 'entity_name', name: 'Entity Name', resizable: true, sortable: true, width: 150 },
     { key: 'action', name: 'Action', resizable: true, sortable: true, width: 120 },
-    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: true },
-    { key: 'payload', name: 'Payload', resizable: true, sortable: true },
+    { key: 'user', name: 'User', resizable: true, sortable: true, width: 200, formatter: ({row}) => row.user?.name || 'N/A' },
+    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: true, formatter: ({row}) => <div className="line-clamp-2">{row.difference_list}</div> },
+    { key: 'payload', name: 'Payload', resizable: true, sortable: true, formatter: ({row}) => <div className="line-clamp-2">{row.payload}</div> },
     { key: 'details', name: 'Details', width: 80, resizable: false, formatter: ({row}) => (
         <Dialog>
             <DialogTrigger asChild>
@@ -152,7 +156,7 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
         return data.filter(row => {
             return Object.entries(filters).every(([columnKey, filterValue]) => {
                 if (!filterValue) return true;
-                const rowValue = row[columnKey as keyof ProcessedAuditEvent];
+                const rowValue = columnKey === 'user' ? row.user?.name : row[columnKey as keyof ProcessedAuditEvent];
                 return String(rowValue).toLowerCase().includes(filterValue.toLowerCase());
             });
         });
@@ -185,13 +189,15 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
     const gridColumns = useMemo((): readonly Column<ProcessedAuditEvent>[] => {
         return columns.map(col => ({
             ...col,
-            headerCellClass: 'h-auto',
+            headerCellClass: 'h-auto py-2',
             renderHeaderCell: col.key === 'details' ? undefined : (p) => <HeaderRenderer {...p} />,
             cellClass: (row) => {
+                let classNames = 'py-2';
                 for (const rule of conditionalFormatRules) {
                     if (!rule.enabled || rule.column !== col.key) continue;
                     
-                    const cellValue = String(row[rule.column as keyof ProcessedAuditEvent] ?? '').toLowerCase();
+                    const cellValueSource = col.key === 'user' ? row.user?.name : row[rule.column as keyof ProcessedAuditEvent];
+                    const cellValue = String(cellValueSource ?? '').toLowerCase();
                     const ruleValue = rule.value.toLowerCase();
 
                     let match = false;
@@ -203,9 +209,18 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                         case 'starts_with': if(cellValue.startsWith(ruleValue)) match = true; break;
                         case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
                     }
-                    if(match) return `bg-[${rule.color}]`;
+                    if(match) {
+                        // Tailwind does not support dynamic class names like `bg-[${rule.color}]`
+                        // so we must use inline styles.
+                        return (row) => {
+                            return {
+                                backgroundColor: rule.color,
+                                color: 'white', // A simple contrast logic might be needed here
+                            };
+                        };
+                    }
                 }
-                return '';
+                return classNames;
             }
         }));
     }, [columns, filters, conditionalFormatRules]);
@@ -214,7 +229,7 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
     return (
         <div className="h-full flex flex-col gap-4">
             <div className="flex-none">
-                <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns} />
+                <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns.filter(c => c.key !== 'user')} />
             </div>
             <div className="flex-grow min-h-0">
                 <DataGrid
@@ -224,7 +239,8 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                     sortColumns={sortColumns}
                     onSortColumnsChange={setSortColumns}
                     onColumnsChange={setColumns}
-                    headerRowHeight={65}
+                    headerRowHeight={70}
+                    rowHeight={55}
                 />
             </div>
         </div>

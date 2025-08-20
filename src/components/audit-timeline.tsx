@@ -238,8 +238,8 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, ...otherDetails } = event;
-        const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
+        const { created_timestamp, entity_name, action: evtAction, user, ...otherDetails } = event;
+        const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL' && key !== 'searchable_text' && key !== 'parsed_payload' && key !== 'parsed_difference_list');
 
         if (detailsToShow.length > 0) {
             formattedView = <DetailView items={detailsToShow} type="key-value" />;
@@ -847,24 +847,22 @@ export default function AuditTimeline() {
       );
   }
 
-  const entities = useMemo(() => {
+  const allEntities = useMemo(() => {
     const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
     return uniqueEntities.sort();
   }, [data]);
 
-  const actions = useMemo(() => {
+  const allActions = useMemo(() => {
     const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
     return uniqueActions.sort();
   }, [data]);
 
   useEffect(() => {
     if (data.length > 0) {
-        const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
-        setSelectedEntities(uniqueEntities.sort());
-        const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
-        setSelectedActions(uniqueActions.sort());
+        setSelectedEntities(allEntities);
+        setSelectedActions(allActions);
     }
-  }, [data]);
+  }, [data, allEntities, allActions]);
   
   // Perform the expensive logical sort only when the base data changes
   const logicallySortedData = useMemo(() => {
@@ -967,7 +965,7 @@ export default function AuditTimeline() {
                     <MultiSelectFilter 
                         title="Action"
                         pluralTitle="Actions"
-                        options={actions}
+                        options={allActions}
                         selectedValues={selectedActions}
                         onSelectionChange={setSelectedActions}
                         className="w-full sm:w-[180px]"
@@ -975,7 +973,7 @@ export default function AuditTimeline() {
                     <MultiSelectFilter 
                         title="Entity"
                         pluralTitle="Entities"
-                        options={entities}
+                        options={allEntities}
                         selectedValues={selectedEntities}
                         onSelectionChange={setSelectedEntities}
                         className="w-full sm:w-[180px]"
@@ -994,62 +992,64 @@ export default function AuditTimeline() {
           </div>
           <div className='flex-grow min-h-0'>
             {activeView === 'timeline' ? (
-                <VerticalTimeline lineColor={'hsl(var(--border))'}>
-                {filteredData.map((event, index) => {
-                    const { created_timestamp, entity_name, action } = event;
-                    if (!created_timestamp || !action) {
-                        return null;
-                    }
-                    const eventDate = new Date(created_timestamp);
-                    const icon = getIconForEvent(action);
+                <ScrollArea className="h-full">
+                    <VerticalTimeline lineColor={'hsl(var(--border))'}>
+                    {filteredData.map((event, index) => {
+                        const { created_timestamp, entity_name, action } = event;
+                        if (!created_timestamp || !action) {
+                            return null;
+                        }
+                        const eventDate = new Date(created_timestamp);
+                        const icon = getIconForEvent(action);
 
-                    return (
-                    <VerticalTimelineElement
-                        key={index}
-                        id={index === 0 ? 'timeline-event-card' : undefined}
-                        className="vertical-timeline-element--work"
-                        contentStyle={{ 
-                            background: 'hsl(var(--card))', 
-                            color: 'hsl(var(--card-foreground))',
-                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '0.5rem',
-                            borderTop: `4px solid hsl(var(--primary))`
-                        }}
-                        contentArrowStyle={{ borderRight: '7px solid hsl(var(--card))' }}
-                        dateClassName="!text-muted-foreground !font-sans"
-                        date={format(eventDate, "PPpp")}
-                        iconStyle={{ 
-                            background: 'hsl(var(--primary))', 
-                            color: 'hsl(var(--primary-foreground))',
-                            boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 6px hsl(var(--primary))'
-                        }}
-                        icon={icon}
-                    >
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h3 className="vertical-timeline-element-title text-lg font-bold text-left font-headline">{action}</h3>
-                                <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
+                        return (
+                        <VerticalTimelineElement
+                            key={index}
+                            id={index === 0 ? 'timeline-event-card' : undefined}
+                            className="vertical-timeline-element--work"
+                            contentStyle={{ 
+                                background: 'hsl(var(--card))', 
+                                color: 'hsl(var(--card-foreground))',
+                                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '0.5rem',
+                                borderTop: `4px solid hsl(var(--primary))`
+                            }}
+                            contentArrowStyle={{ borderRight: '7px solid hsl(var(--card))' }}
+                            dateClassName="!text-muted-foreground !font-sans"
+                            date={format(eventDate, "PPpp")}
+                            iconStyle={{ 
+                                background: 'hsl(var(--primary))', 
+                                color: 'hsl(var(--primary-foreground))',
+                                boxShadow: '0 0 0 4px hsl(var(--background)), 0 0 0 6px hsl(var(--primary))'
+                            }}
+                            icon={icon}
+                        >
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="vertical-timeline-element-title text-lg font-bold text-left font-headline">{action}</h3>
+                                    <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
+                                </div>
+                                <Dialog>
+                                    <DialogTrigger asChild>
+                                        <Button variant="ghost" size="icon">
+                                            <Maximize className="h-4 w-4" />
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh]">
+                                        <DialogHeader>
+                                            <DialogTitle>{action} on {entity_name}</DialogTitle>
+                                        </DialogHeader>
+                                        {renderDetails(event)}
+                                    </DialogContent>
+                                </Dialog>
                             </div>
-                            <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <Maximize className="h-4 w-4" />
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh]">
-                                    <DialogHeader>
-                                        <DialogTitle>{action} on {entity_name}</DialogTitle>
-                                    </DialogHeader>
-                                    {renderDetails(event)}
-                                </DialogContent>
-                            </Dialog>
-                        </div>
-                        {renderPreview(event)}
-                    </VerticalTimelineElement>
-                    );
-                })}
-                </VerticalTimeline>
+                            {renderPreview(event)}
+                        </VerticalTimelineElement>
+                        );
+                    })}
+                    </VerticalTimeline>
+                </ScrollArea>
             ) : (
                 <AdvancedDataTable data={filteredData} />
             )}
