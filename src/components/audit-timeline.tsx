@@ -42,7 +42,7 @@ import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema } from '@/lib/types';
-import AdvancedDataTable from './advanced-data-table';
+import { DataTable } from './data-table';
 import { format } from 'date-fns';
 
 
@@ -247,8 +247,8 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
     }
 
     return (
-        <ScrollArea className="h-[60vh] w-full p-1">
-            <div className="space-y-4">
+        <ScrollArea className="h-full w-full p-1">
+            <div className="space-y-4 p-4">
                 {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
                 
                 {(payload !== "NULL" || difference_list !== "NULL") && (
@@ -1050,7 +1050,11 @@ export default function AuditTimeline() {
                     </VerticalTimeline>
                 </ScrollArea>
             ) : (
-                <AdvancedDataTable data={filteredData} />
+                <div className="border rounded-lg overflow-hidden h-full">
+                    <ScrollArea className="h-full">
+                        <DataTable data={filteredData} />
+                    </ScrollArea>
+                </div>
             )}
           </div>
       </div>
