@@ -1,17 +1,13 @@
 
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import DataGrid from 'react-data-grid';
 import type { Column, SortColumn } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent, renderDetails } from './audit-timeline';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Trash2, Plus, Wand2 } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Input } from './ui/input';
-import { ScrollArea } from './ui/scroll-area';
 
 interface AdvancedDataTableProps {
   data: ProcessedAuditEvent[];
@@ -45,18 +41,7 @@ function getComparator(sortColumn: string): Comparator {
     }
 }
 
-type Condition = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'starts_with' | 'ends_with';
-
-interface ConditionalFormatRule {
-    id: string;
-    column: string;
-    condition: Condition;
-    value: string;
-    color: string;
-    enabled: boolean;
-}
-
-const defaultColumns: readonly Column<ProcessedAuditEvent>[] = [
+const columns: readonly Column<ProcessedAuditEvent>[] = [
     { key: 'created_timestamp', name: 'Timestamp', resizable: true, sortable: true, width: 200, formatter: ({row}) => new Date(row.created_timestamp).toLocaleString() },
     { key: 'entity_name', name: 'Entity Name', resizable: true, sortable: true, width: 150 },
     { key: 'action', name: 'Action', resizable: true, sortable: true, width: 120 },
@@ -78,220 +63,28 @@ const defaultColumns: readonly Column<ProcessedAuditEvent>[] = [
     )}
 ];
 
-const ConditionalFormattingManager: React.FC<{
-    rules: ConditionalFormatRule[],
-    setRules: React.Dispatch<React.SetStateAction<ConditionalFormatRule[]>>,
-    columns: readonly Column<ProcessedAuditEvent>[]
-}> = ({ rules, setRules, columns }) => {
-    
-    const addRule = () => {
-        setRules(prev => [...prev, { id: crypto.randomUUID(), column: 'action', condition: 'equals', value: '', color: '#ffffff', enabled: true }]);
-    };
-
-    const removeRule = (id: string) => {
-        setRules(prev => prev.filter(rule => rule.id !== id));
-    };
-
-    const updateRule = (id: string, field: keyof ConditionalFormatRule, value: any) => {
-        setRules(prev => prev.map(rule => rule.id === id ? { ...rule, [field]: value } : rule));
-    };
-    
-    return (
-        <Dialog>
-            <DialogTrigger asChild>
-                <Button variant="outline"><Wand2 className="mr-2 h-4 w-4" />Conditional Formatting</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl">
-                <DialogHeader>
-                    <DialogTitle>Conditional Formatting Rules</DialogTitle>
-                </DialogHeader>
-                <ScrollArea className="h-96 pr-6">
-                    <div className="space-y-4">
-                        {rules.map(rule => (
-                            <div key={rule.id} className="grid grid-cols-12 gap-2 items-center p-2 border rounded-md">
-                                <div className="col-span-3">
-                                    <Select value={rule.column} onValueChange={(val) => updateRule(rule.id, 'column', val)}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            {columns.filter(c => c.key !== 'details').map(col => (
-                                                <SelectItem key={col.key} value={col.key}>{col.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="col-span-3">
-                                    <Select value={rule.condition} onValueChange={(val) => updateRule(rule.id, 'condition', val)}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="equals">Equals</SelectItem>
-                                            <SelectItem value="not_equals">Not Equals</SelectItem>
-                                            <SelectItem value="contains">Contains</SelectItem>
-                                            <SelectItem value="not_contains">Not Contains</SelectItem>
-                                            <SelectItem value="starts_with">Starts With</SelectItem>
-                                            <SelectItem value="ends_with">Ends With</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="col-span-3">
-                                    <Input value={rule.value} onChange={(e) => updateRule(rule.id, 'value', e.target.value)} placeholder="Value..."/>
-                                </div>
-                                <div className="col-span-1">
-                                    <Input type="color" value={rule.color} onChange={(e) => updateRule(rule.id, 'color', e.target.value)} className="p-1 h-10"/>
-                                </div>
-                                <div className="col-span-2 flex justify-end">
-                                    <Button variant="ghost" size="icon" onClick={() => removeRule(rule.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-                <Button onClick={addRule}><Plus className="mr-2 h-4 w-4" />Add Rule</Button>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
 export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
-    const [columns, setColumns] = useState(defaultColumns);
     const [sortColumns, setSortColumns] = useState<readonly SortColumn[]>([]);
-    const [filters, setFilters] = useState<Record<string, string>>({});
-    const [conditionalFormatRules, setConditionalFormatRules] = useState<ConditionalFormatRule[]>([]);
-
-    const filteredData = useMemo(() => {
-        return data.filter(row => {
-            return Object.entries(filters).every(([columnKey, filterValue]) => {
-                if (!filterValue) return true;
-                let rowValue;
-
-                if (columnKey === 'user') {
-                    rowValue = row.user?.name;
-                } else if (columnKey === 'created_timestamp') {
-                    rowValue = new Date(row.created_timestamp).toLocaleString();
-                } 
-                else {
-                    rowValue = row[columnKey as keyof ProcessedAuditEvent];
-                }
-
-                return String(rowValue).toLowerCase().includes(filterValue.toLowerCase());
-            });
-        });
-    }, [data, filters]);
 
     const sortedData = useMemo((): readonly ProcessedAuditEvent[] => {
-        if (sortColumns.length === 0) return filteredData;
+        if (sortColumns.length === 0) return data;
         const { columnKey, direction } = sortColumns[0];
         const comparator = getComparator(columnKey);
-        const sorted = [...filteredData].sort(comparator);
+        const sorted = [...data].sort(comparator);
         return direction === 'ASC' ? sorted : sorted.reverse();
-    }, [filteredData, sortColumns]);
-    
-    const HeaderRenderer = (props: any) => {
-        const columnKey = props.column.key;
-        return (
-            <div className="flex flex-col h-full justify-center gap-1">
-                <div className="font-bold">{props.column.name}</div>
-                <Input
-                    className="h-8 w-full"
-                    placeholder="Filter..."
-                    value={filters[columnKey] || ''}
-                    onChange={e => setFilters(prev => ({...prev, [columnKey]: e.target.value}))}
-                    onClick={e => e.stopPropagation()} // Prevent sorting when clicking filter
-                />
-            </div>
-        )
-    }
-
-    const gridColumns = useMemo((): readonly Column<ProcessedAuditEvent>[] => {
-        return columns.map(col => ({
-            ...col,
-            headerCellClass: 'h-auto py-2 bg-muted/50',
-            renderHeaderCell: col.key === 'details' || !col.sortable ? undefined : (p) => <HeaderRenderer {...p} />,
-            cellClass: (row) => {
-                let baseClass = 'py-2';
-                if (col.key === 'difference_list' || col.key === 'payload') {
-                    baseClass += ' whitespace-pre-wrap break-words';
-                }
-
-                for (const rule of conditionalFormatRules) {
-                    if (!rule.enabled || rule.column !== col.key) continue;
-                    
-                    const cellValueSource = col.key === 'user' ? row.user?.name : row[rule.column as keyof ProcessedAuditEvent];
-                    const cellValue = String(cellValueSource ?? '').toLowerCase();
-                    const ruleValue = rule.value.toLowerCase();
-
-                    let match = false;
-                    switch(rule.condition) {
-                        case 'equals': if(cellValue === ruleValue) match = true; break;
-                        case 'not_equals': if(cellValue !== ruleValue) match = true; break;
-                        case 'contains': if(cellValue.includes(ruleValue)) match = true; break;
-                        case 'not_contains': if(!cellValue.includes(ruleValue)) match = true; break;
-                        case 'starts_with': if(cellValue.startsWith(ruleValue)) match = true; break;
-                        case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
-                    }
-                    if(match) {
-                        // This is a bit of a hack, but react-data-grid doesn't have a great way to do this.
-                        // We'll rely on the formatter to apply the style.
-                        return baseClass;
-                    }
-                }
-                return baseClass;
-            },
-            formatter: (props) => {
-                const { row, column } = props;
-                const defaultFormatter = col.formatter ? col.formatter(props) : String(props.row[column.key as keyof ProcessedAuditEvent] ?? '');
-                
-                for (const rule of conditionalFormatRules) {
-                     if (!rule.enabled || rule.column !== column.key) continue;
-                    
-                    let cellValueSource = row[rule.column as keyof ProcessedAuditEvent];
-                    if (column.key === 'user') {
-                        cellValueSource = row.user?.name;
-                    } else if (column.key === 'created_timestamp') {
-                        cellValueSource = new Date(row.created_timestamp).toLocaleString();
-                    }
-
-                    const cellValue = String(cellValueSource ?? '').toLowerCase();
-                    const ruleValue = rule.value.toLowerCase();
-
-                    let match = false;
-                    switch(rule.condition) {
-                        case 'equals': if(cellValue === ruleValue) match = true; break;
-                        case 'not_equals': if(cellValue !== ruleValue) match = true; break;
-                        case 'contains': if(cellValue.includes(ruleValue)) match = true; break;
-                        case 'not_contains': if(!cellValue.includes(ruleValue)) match = true; break;
-                        case 'starts_with': if(cellValue.startsWith(ruleValue)) match = true; break;
-                        case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
-                    }
-
-                    if (match) {
-                        return <div style={{ backgroundColor: rule.color, color: 'hsl(var(--foreground))', padding: '0 4px', height: '100%', display: 'flex', alignItems: 'center' }}>{defaultFormatter}</div>;
-                    }
-                }
-                
-                return defaultFormatter;
-            }
-        }));
-    }, [columns, filters, conditionalFormatRules]);
-
+    }, [data, sortColumns]);
 
     return (
-        <div className="h-full flex flex-col gap-4">
-            <div className="flex-none">
-                <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns.filter(c => !['details', 'user', 'difference_list', 'payload'].includes(c.key))} />
-            </div>
-            <div className="flex-grow min-h-0 border rounded-md overflow-hidden">
-                <DataGrid
-                    className="rdg-light h-full w-full"
-                    columns={gridColumns}
-                    rows={sortedData}
-                    sortColumns={sortColumns}
-                    onSortColumnsChange={setSortColumns}
-                    onColumnsChange={setColumns}
-                    headerRowHeight={80}
-                    rowHeight={55}
-                />
-            </div>
+        <div className="flex-grow min-h-0 border rounded-md overflow-hidden">
+            <DataGrid
+                className="rdg-light h-full w-full"
+                columns={columns}
+                rows={sortedData}
+                sortColumns={sortColumns}
+                onSortColumnsChange={setSortColumns}
+                headerRowHeight={45}
+                rowHeight={55}
+            />
         </div>
     );
-
-    
+}

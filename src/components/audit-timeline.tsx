@@ -990,7 +990,7 @@ export default function AuditTimeline() {
                   <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
               </div>
           </div>
-          <div className='flex-grow min-h-0'>
+          <div className='flex-grow min-h-0 flex flex-col gap-4'>
             {activeView === 'timeline' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
