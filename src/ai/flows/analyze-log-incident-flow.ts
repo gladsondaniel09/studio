@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview An AI flow for analyzing audit logs to extract incident details.
@@ -16,19 +15,9 @@ import {
 
 // -------- Config --------
 const MODEL_ID = 'sonar-pro'; // use 'sonar' if logs are small, 'sonar-pro' for more headroom
-const TEMPERATURE = 0.2;
-const MAX_TOKENS = 1400; // adjust as needed
-const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_INPUT_CHARS = 16_000; // cap raw logs length; tune per your needs
-const ENABLE_RETRY = true;
 
 // -------- Utilities --------
-function createTimeoutSignal(ms: number) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  return { signal: controller.signal, cancel: () => clearTimeout(id) };
-}
-
 function safeJsonParse(text: string): object {
     // Attempt to find the JSON object within the text using a regular expression.
     // This is more robust against extra text or markdown fences.
@@ -63,18 +52,6 @@ function truncateLogs(raw: string) {
   return raw.slice(0, MAX_INPUT_CHARS) + '\n[TRUNCATED]';
 }
 
-function formatZodIssues(issues: any[]) {
-  try {
-    return issues.map((i) => ({
-      path: Array.isArray(i.path) ? i.path.join('.') : i.path,
-      message: i.message,
-      code: i.code,
-    }));
-  } catch {
-    return issues;
-  }
-}
-
 // -------- Public API --------
 export async function analyzeLogIncident(
   input: IncidentAnalysisInput
@@ -82,13 +59,27 @@ export async function analyzeLogIncident(
   return analyzeLogIncidentFlow(input);
 }
 
-// -------- Prompt --------
-const prompt = ai.definePrompt({
-  name: 'analyzeLogIncidentPrompt',
-  input: { schema: IncidentAnalysisInputSchema },
-  output: { schema: IncidentAnalysisOutputSchema },
-  model: MODEL_ID,
-  prompt: `System:
+// -------- Flow --------
+const analyzeLogIncidentFlow = ai.defineFlow(
+  {
+    name: 'analyzeLogIncidentFlow',
+    inputSchema: IncidentAnalysisInputSchema,
+    outputSchema: IncidentAnalysisOutputSchema,
+  },
+  async (input) => {
+    if (!input?.logs || input.logs.trim().length === 0) {
+      throw new Error('logs is required and cannot be empty.');
+    }
+
+    const preparedLogs = truncateLogs(input.logs);
+    const apiKey = process.env.PERPLEXITY_API_KEY;
+
+    if (!apiKey) {
+      throw new Error('PERPLEXITY_API_KEY is not configured in the environment.');
+    }
+
+    try {
+      const promptText = `System:
 You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
 Return ONLY a valid JSON object that conforms to the specified fields. Do not include markdown, code fences, or commentary.
 
@@ -105,94 +96,46 @@ Output fields (must be present):
 - recommended_steps: string[]
 - confidence: number between 0.0 and 1.0
 
-Example (structure only; adjust values to the logs):
-{
-  "severity": "High",
-  "suspected_component": "Risk Engine",
-  "error_signature": "ERR-RISK-VAL-001",
-  "time_range": { "start": "2025-08-20T12:00:00Z", "end": "2025-08-20T12:15:00Z" },
-  "impacted_entities": ["Trade#12345", "User:jsmith"],
-  "probable_causes": ["Null pointer in valuation path"],
-  "recommended_steps": ["Restart risk service", "Purge cache", "Re-run EOD valuation"],
-  "confidence": 0.82
-}
-
 Logs to analyze:
-{{{logs}}}
-`,
-});
+${preparedLogs}`;
 
-// -------- Flow --------
-const analyzeLogIncidentFlow = ai.defineFlow(
-  {
-    name: 'analyzeLogIncidentFlow',
-    inputSchema: IncidentAnalysisInputSchema,
-    outputSchema: IncidentAnalysisOutputSchema,
-  },
-  async (input) => {
-    if (!input?.logs || input.logs.trim().length === 0) {
-      throw new Error('logs is required and cannot be empty.');
-    }
+      const response = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: MODEL_ID,
+          messages: [{ role: 'user', content: promptText }],
+          temperature: 0.2,
+          max_tokens: 1400,
+        }),
+        cache: 'no-store',
+      });
 
-    const preparedInput = {
-      ...input,
-      logs: truncateLogs(input.logs),
-    };
+      const responseText = await response.text();
 
-    let attempt = 0;
-    let lastErr: any;
-    
-    while (attempt < (ENABLE_RETRY ? 2 : 1)) {
-      attempt++;
-      let raw = '';
-
-      try {
-        const { signal, cancel } = createTimeoutSignal(REQUEST_TIMEOUT_MS);
-        
-        const invoke = (prompt as any).withConfig
-          ? (prompt as any).withConfig({
-              model: MODEL_ID,
-              options: { temperature: TEMPERATURE, max_tokens: MAX_TOKENS, signal },
-            })
-          : prompt;
-
-        const { output } = await invoke(preparedInput);
-
-        cancel();
-        
-        if (!output) throw new Error('Model returned no output.');
-
-        raw = typeof output === 'string' ? output : JSON.stringify(output);
-        const maybeParsed = typeof output === 'string' ? safeJsonParse(output) : output;
-
-        const validated = IncidentAnalysisOutputSchema.parse(maybeParsed);
-        return validated;
-      } catch (err: any) {
-        lastErr = err;
-        // Print everything we need ONCE
-        console.error('[analyze] failure details:', {
-            message: err?.message,
-            name: err?.name,
-            zodIssues: err?.issues
-            ? err.issues.map((i: any) => ({ path: i.path, message: i.message }))
-            : undefined,
-            rawPreview: raw ? raw.slice(0, 1200) : undefined,
+      if (!response.ok) {
+        console.error('Perplexity API Error:', {
+          status: response.status,
+          body: responseText.slice(0, 500),
         });
-
-        const retriable =
-          err?.name === 'AbortError' ||
-          /timeout|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(err?.message || '') ||
-          err?.message?.includes('Failed to parse JSON');
-
-        if (!(ENABLE_RETRY && attempt < 2 && retriable)) {
-             break;
-        }
+        throw new Error(`Perplexity API call failed with status ${response.status}`);
       }
-    }
 
-    // Final throw with friendly message
-    throw new Error(
-      'Failed to analyze logs. Please try again with fewer logs or adjust the input.'
-    );
+      const parsed = safeJsonParse(responseText);
+      const validated = IncidentAnalysisOutputSchema.parse(parsed);
+      return validated;
+
+    } catch (err: any) {
+      console.error('[analyzeLogIncidentFlow] uncaught error:', {
+        message: err?.message,
+        name: err?.name,
+        stack: err?.stack,
+      });
+      // Re-throw a user-friendly error
+      throw new Error('Failed to analyze logs. Please try again with fewer logs or adjust the input.');
+    }
   }
 );
