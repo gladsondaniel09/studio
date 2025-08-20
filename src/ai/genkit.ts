@@ -9,5 +9,5 @@ export const ai = genkit({
     }),
   ],
   logLevel: 'debug',
-  model: 'llama-3-sonar-large-32k-online',
+  model: 'openai/llama-3-sonar-large-32k-online',
 });
