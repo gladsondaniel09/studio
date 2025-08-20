@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -8,7 +9,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Share2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -18,7 +19,6 @@ import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -41,9 +41,11 @@ import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
-import { AuditEvent, SampleEventSchema } from '@/lib/types';
+import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/lib/types';
 import { DataTable } from './data-table';
 import { format } from 'date-fns';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 
 
 // Extend the AuditEvent type to include our pre-processed fields
@@ -246,12 +248,14 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
         }
     }
 
+    const hasRawDetails = payload !== "NULL" || difference_list !== "NULL";
+
     return (
         <ScrollArea className="h-full w-full p-1">
             <div className="space-y-4 p-4">
                 {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
                 
-                {(payload !== "NULL" || difference_list !== "NULL") && (
+                {hasRawDetails && (
                     <Accordion type="single" collapsible className="w-full pt-4">
                         <AccordionItem value="item-1">
                             <AccordionTrigger>
@@ -502,6 +506,62 @@ const processAuditData = (events: AuditEvent[]): ProcessedAuditEvent[] => {
   });
 };
 
+const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) => {
+    return (
+        <Card className="mt-4">
+            <CardHeader>
+                <CardTitle className="flex justify-between items-start">
+                    <span>AI Incident Analysis</span>
+                    <span className="text-sm font-medium text-muted-foreground">
+                        Confidence: {(result.confidence * 100).toFixed(0)}%
+                    </span>
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><strong>Severity:</strong> <span className="font-mono bg-muted p-1 rounded">{result.severity}</span></div>
+                    <div><strong>Suspected Component:</strong> <span className="font-mono bg-muted p-1 rounded">{result.suspected_component}</span></div>
+                </div>
+                <div>
+                    <strong>Error Signature:</strong>
+                    <p className="font-mono bg-muted p-2 rounded text-xs">{result.error_signature}</p>
+                </div>
+                <div>
+                    <strong>Impacted Entities:</strong>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                        {result.impacted_entities.map((entity, i) => <span key={i} className="bg-muted px-2 py-1 rounded-full text-xs">{entity}</span>)}
+                    </div>
+                </div>
+                <div>
+                    <strong>Probable Causes:</strong>
+                    <ul className="list-disc pl-5 mt-1 space-y-1">
+                        {result.probable_causes.map((cause, i) => <li key={i}>{cause}</li>)}
+                    </ul>
+                </div>
+                <div>
+                    <strong>Recommended Steps:</strong>
+                     <ul className="list-decimal pl-5 mt-1 space-y-1">
+                        {result.recommended_steps.map((step, i) => <li key={i}>{step}</li>)}
+                    </ul>
+                </div>
+
+                <Accordion type="single" collapsible className="w-full pt-4">
+                    <AccordionItem value="raw-json">
+                        <AccordionTrigger>
+                            <div className="flex items-center gap-2">
+                                <Code className="h-4 w-4" /> View Raw JSON Response
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                           <RawJsonViewer jsonString={JSON.stringify(result)} title="AI Response" />
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </CardContent>
+        </Card>
+    );
+};
+
 
 export default function AuditTimeline() {
   const [data, setData] = useState<ProcessedAuditEvent[]>([]);
@@ -522,6 +582,9 @@ export default function AuditTimeline() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const progressIntervalRef = useRef<NodeJS.Timeout>();
   const [activeView, setActiveView] = useState<'timeline' | 'table'>('timeline');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
+  const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
 
   useEffect(() => {
     // Show upload walkthrough on initial load
@@ -629,12 +692,15 @@ export default function AuditTimeline() {
                   setView('upload');
               } else {
                   const validatedData = z.array(SampleEventSchema).safeParse(validData);
+                  let processedData: ProcessedAuditEvent[] = [];
                   if (validatedData.success) {
-                    setData(processAuditData(validatedData.data));
+                    processedData = processAuditData(validatedData.data);
+                    setData(processedData);
                   } else {
                     console.error(validatedData.error);
                     setError('CSV data does not match the expected format.');
-                    setData(processAuditData(validData as AuditEvent[])); // Fallback to raw data for display
+                    processedData = processAuditData(validData as AuditEvent[]);
+                    setData(processedData); // Fallback to raw data for display
                   }
                   setView('timeline');
               }
@@ -656,7 +722,8 @@ export default function AuditTimeline() {
       const demoData = await generateDemoData();
       const validatedData = z.array(SampleEventSchema).safeParse(demoData.events);
       if (validatedData.success) {
-        setData(processAuditData(validatedData.data));
+        const processed = processAuditData(validatedData.data);
+        setData(processed);
         setView('timeline');
       } else {
         console.error(validatedData.error);
@@ -691,6 +758,7 @@ export default function AuditTimeline() {
     setSelectedActions([]);
     setSortOrder('desc');
     setSelectedFlowEntities(null);
+    setAnalysisResult(null);
   }
   
   const handleStageClick = (entities: string[]) => {
@@ -698,6 +766,46 @@ export default function AuditTimeline() {
           JSON.stringify(current) === JSON.stringify(entities) ? null : entities
       );
   }
+
+    const handleAnalyze = async () => {
+        if (filteredData.length === 0) {
+            toast({
+                variant: 'destructive',
+                title: 'No Data to Analyze',
+                description: 'There are no logs in the current view to analyze.',
+            });
+            return;
+        }
+
+        setIsAnalyzing(true);
+        setAnalysisResult(null);
+        setShowAnalysisDialog(true);
+
+        try {
+            // Convert the filtered data to a simple string format for the prompt
+            const logString = filteredData.map(e => JSON.stringify({
+                timestamp: e.created_timestamp,
+                action: e.action,
+                entity: e.entity_name,
+                user: e.user?.name,
+                details: e.payload === 'NULL' ? e.difference_list : e.payload
+            })).join('\n');
+
+            const result = await analyzeLogIncident({ logs: logString });
+            setAnalysisResult(result);
+        } catch (e: any) {
+            console.error(e);
+            toast({
+                variant: 'destructive',
+                title: 'Analysis Failed',
+                description: e.message || 'An unexpected error occurred while analyzing the logs.',
+            });
+            // Don't close the dialog on error, user might want to retry
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
 
   const allEntities = useMemo(() => {
     const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
@@ -763,6 +871,22 @@ export default function AuditTimeline() {
             isOpen={showTimelineWalkthrough}
             onClose={() => setShowTimelineWalkthrough(false)}
           />
+           <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
+                <DialogContent className="max-w-3xl w-full h-auto max-h-[90vh]">
+                    <DialogHeader>
+                        <DialogTitle>Log Analysis</DialogTitle>
+                    </DialogHeader>
+                    <div className="overflow-y-auto">
+                        {isAnalyzing && (
+                            <div className="flex flex-col items-center justify-center gap-4 p-8">
+                                <Loader className="w-10 h-10 animate-spin text-primary" />
+                                <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
+                            </div>
+                        )}
+                        {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
+                    </div>
+                </DialogContent>
+            </Dialog>
           <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
               <div className='flex items-center gap-3'>
                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
@@ -773,7 +897,11 @@ export default function AuditTimeline() {
                     Audit Log Explorer
                   </h1>
               </div>
-              <div className="flex-shrink-0">
+               <div className="flex-shrink-0 flex items-center gap-2">
+                  <Button onClick={handleAnalyze} disabled={isAnalyzing}>
+                      {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
+                      Analyze
+                  </Button>
                   <ThemeToggle />
               </div>
           </header>
@@ -973,3 +1101,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
