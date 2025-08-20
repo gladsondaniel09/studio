@@ -13,18 +13,62 @@ import {
   type IncidentAnalysisOutput,
 } from '@/lib/types';
 
+// -------- Config --------
+const MODEL_ID = 'sonar-pro'; // use 'sonar' if logs are small, 'sonar-pro' for more headroom
+const TEMPERATURE = 0.2;
+const MAX_TOKENS = 1400; // adjust as needed
+const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_INPUT_CHARS = 16_000; // cap raw logs length; tune per your needs
+const ENABLE_RETRY = true;
+
+// -------- Utilities --------
+function createTimeoutSignal(ms: number) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, cancel: () => clearTimeout(id) };
+}
+
+function safeJsonParse(text: string) {
+  const cleaned = text
+    .trim()
+    .replace(/^\uFEFF/, '') // strip BOM if present
+    .replace(/^```json\n/, '')
+    .replace(/\n```$/, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
+function truncateLogs(raw: string) {
+  if (!raw) return raw;
+  if (raw.length <= MAX_INPUT_CHARS) return raw;
+  return raw.slice(0, MAX_INPUT_CHARS) + '\n[TRUNCATED]';
+}
+
+function formatZodIssues(issues: any[]) {
+  try {
+    return issues.map((i) => ({
+      path: Array.isArray(i.path) ? i.path.join('.') : i.path,
+      message: i.message,
+      code: i.code,
+    }));
+  } catch {
+    return issues;
+  }
+}
+
+// -------- Public API --------
 export async function analyzeLogIncident(
   input: IncidentAnalysisInput
 ): Promise<IncidentAnalysisOutput> {
   return analyzeLogIncidentFlow(input);
 }
 
+// -------- Prompt --------
 const prompt = ai.definePrompt({
   name: 'analyzeLogIncidentPrompt',
   input: { schema: IncidentAnalysisInputSchema },
   output: { schema: IncidentAnalysisOutputSchema },
-  model: 'sonar-pro',
-  // Keep the “system” guidance up front and make the model return only JSON.
+  model: MODEL_ID,
   prompt: `System:
 You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
 Return ONLY a valid JSON object that conforms to the specified fields. Do not include markdown, code fences, or commentary.
@@ -59,6 +103,7 @@ Logs to analyze:
 `,
 });
 
+// -------- Flow --------
 const analyzeLogIncidentFlow = ai.defineFlow(
   {
     name: 'analyzeLogIncidentFlow',
@@ -66,48 +111,82 @@ const analyzeLogIncidentFlow = ai.defineFlow(
     outputSchema: IncidentAnalysisOutputSchema,
   },
   async (input) => {
-    // Guard: require logs
     if (!input?.logs || input.logs.trim().length === 0) {
       throw new Error('logs is required and cannot be empty.');
     }
 
-    try {
-      const { output } = await prompt(input);
+    const preparedInput = {
+      ...input,
+      logs: truncateLogs(input.logs),
+    };
 
-      if (!output) {
-        throw new Error('Model returned no output.');
+    // Optional: log presence of API key once during init (comment out after verifying)
+    // console.log('Perplexity key present:', !!process.env.PERPLEXITY_API_KEY);
+
+    let attempt = 0;
+    let lastErr: any;
+
+    while (attempt < (ENABLE_RETRY ? 2 : 1)) {
+      attempt++;
+      const { signal, cancel } = createTimeoutSignal(REQUEST_TIMEOUT_MS);
+      let raw = '';
+
+      try {
+        // If your Genkit version supports per-call options, use withConfig
+        const invoke = (prompt as any).withConfig
+          ? (prompt as any).withConfig({
+              model: MODEL_ID,
+              options: { temperature: TEMPERATURE, max_tokens: MAX_TOKENS, signal },
+            })
+          : prompt;
+
+        const { output } = await invoke(preparedInput);
+
+        if (!output) throw new Error('Model returned no output.');
+
+        raw = typeof output === 'string' ? output : JSON.stringify(output);
+        const maybeParsed = typeof output === 'string' ? safeJsonParse(output) : output;
+
+        const validated = IncidentAnalysisOutputSchema.parse(maybeParsed);
+        cancel();
+        return validated;
+      } catch (err: any) {
+        lastErr = err;
+        // Server-side diagnostics only; keep concise to avoid noisy logs.
+        const zodIssues = err?.issues ? formatZodIssues(err.issues) : undefined;
+        console.error('analyzeLogIncidentFlow attempt failed', {
+          attempt,
+          message: err?.message,
+          name: err?.name,
+          zodIssues,
+          // Show a small preview of raw model output for debugging
+          rawPreview:
+            typeof err?.rawOutput === 'string'
+              ? err.rawOutput.slice(0, 600)
+              : undefined,
+        });
+        // attach raw output if parse/validation failed
+        if (!err.rawOutput) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            err.rawOutput = (typeof (err as any).raw === 'string'
+              ? (err as any).raw
+              : raw) as any;
+          } catch {}
+        }
+        // Retry only on first failure and if error is likely transient or parse-related
+        const retriable =
+          err?.name === 'AbortError' ||
+          /timeout|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(err?.message || '') ||
+          typeof raw === 'string'; // parsing/format issues may succeed on retry
+
+        if (!(ENABLE_RETRY && attempt < 2 && retriable)) break;
       }
-
-      // Some Genkit setups return text; others already coerce to the declared schema.
-      // Safely handle both cases.
-      const maybeParsed =
-        typeof output === 'string' ? safeJsonParse(output) : output;
-
-      // Validate against your declared output schema (throws if invalid).
-      const validated = IncidentAnalysisOutputSchema.parse(maybeParsed);
-
-      return validated;
-    } catch (err: any) {
-      // Improve debuggability without leaking secrets.
-      console.error('analyzeLogIncidentFlow error', {
-        message: err?.message,
-        cause: err?.cause,
-        stack: err?.stack,
-      });
-      throw new Error(
-        'Failed to analyze logs. Please try again with fewer logs or adjust the input.'
-      );
     }
+
+    // Final throw with friendly message
+    throw new Error(
+      'Failed to analyze logs. Please try again with fewer logs or adjust the input.'
+    );
   }
 );
-
-// ---- helpers ----
-function safeJsonParse(text: string) {
-  // Strip common accidental wrappers like code fences if any slip through.
-  const cleaned = text
-    .trim()
-    .replace(/^```json\n/, '')
-    .replace(/\n```$/, '')
-    .trim();
-  return JSON.parse(cleaned);
-}
