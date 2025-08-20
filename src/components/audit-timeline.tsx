@@ -489,10 +489,22 @@ const MultiSelectFilter = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [tempSelectedValues, setTempSelectedValues] = useState(selectedValues);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     setTempSelectedValues(selectedValues);
   }, [selectedValues]);
+  
+  useEffect(() => {
+    if(!isOpen) {
+        setSearchTerm('');
+    }
+  }, [isOpen])
+
+  const filteredOptions = useMemo(() => 
+    options.filter(option =>
+        option.toLowerCase().includes(searchTerm.toLowerCase())
+    ), [options, searchTerm]);
 
   const handleSelectAll = (checked: boolean) => {
     setTempSelectedValues(checked ? options : []);
@@ -534,8 +546,18 @@ const MultiSelectFilter = ({
           <ChevronDown className="ml-2 h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-        <DropdownMenuLabel>{pluralTitle}</DropdownMenuLabel>
+      <DropdownMenuContent className="w-64" align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+        <div className="p-2">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                />
+            </div>
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuCheckboxItem
           checked={tempSelectedValues.length === options.length}
@@ -544,16 +566,18 @@ const MultiSelectFilter = ({
         >
           Select All
         </DropdownMenuCheckboxItem>
-        {options.map((option) => (
-          <DropdownMenuCheckboxItem
-            key={option}
-            checked={tempSelectedValues.includes(option)}
-            onCheckedChange={(checked) => handleSelect(option, !!checked)}
-            onSelect={(e) => e.preventDefault()}
-          >
-            {option}
-          </DropdownMenuCheckboxItem>
-        ))}
+         <ScrollArea className="h-48">
+            {filteredOptions.map((option) => (
+            <DropdownMenuCheckboxItem
+                key={option}
+                checked={tempSelectedValues.includes(option)}
+                onCheckedChange={(checked) => handleSelect(option, !!checked)}
+                onSelect={(e) => e.preventDefault()}
+            >
+                {option}
+            </DropdownMenuCheckboxItem>
+            ))}
+        </ScrollArea>
         <DropdownMenuSeparator />
         <div className="flex justify-end gap-2 p-2">
             <Button variant="ghost" size="sm" onClick={handleCancel}>Cancel</Button>
@@ -1089,5 +1113,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
