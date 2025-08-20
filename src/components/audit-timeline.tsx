@@ -918,7 +918,7 @@ export default function AuditTimeline() {
 
   if (view === 'timeline') {
     return (
-      <div className='flex flex-col h-screen'>
+      <div className='flex flex-col h-screen w-full'>
           <Walkthrough
             steps={timelineWalkthroughSteps}
             isOpen={showTimelineWalkthrough}

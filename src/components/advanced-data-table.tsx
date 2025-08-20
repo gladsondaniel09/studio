@@ -25,10 +25,15 @@ function getComparator(sortColumn: string): Comparator {
             return (a, b) => new Date(a.created_timestamp).getTime() - new Date(b.created_timestamp).getTime();
         case 'entity_name':
         case 'action':
-        case 'user':
             return (a, b) => {
                 const valA = a[sortColumn as keyof ProcessedAuditEvent] || '';
                 const valB = b[sortColumn as keyof ProcessedAuditEvent] || '';
+                return String(valA).localeCompare(String(valB));
+            };
+        case 'user':
+             return (a, b) => {
+                const valA = a.user?.name || '';
+                const valB = b.user?.name || '';
                 return String(valA).localeCompare(String(valB));
             };
         default:
@@ -192,7 +197,6 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
             headerCellClass: 'h-auto py-2',
             renderHeaderCell: col.key === 'details' ? undefined : (p) => <HeaderRenderer {...p} />,
             cellClass: (row) => {
-                let classNames = 'py-2';
                 for (const rule of conditionalFormatRules) {
                     if (!rule.enabled || rule.column !== col.key) continue;
                     
@@ -210,17 +214,18 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                         case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
                     }
                     if(match) {
-                        // Tailwind does not support dynamic class names like `bg-[${rule.color}]`
+                        // This callback is executed for each cell. It must return an object with style properties.
+                        // Note: Tailwind does not support dynamic class names like `bg-[${rule.color}]`
                         // so we must use inline styles.
                         return (row) => {
                             return {
                                 backgroundColor: rule.color,
-                                color: 'white', // A simple contrast logic might be needed here
+                                color: '#ffffff', // A simple contrast logic might be needed here
                             };
                         };
                     }
                 }
-                return classNames;
+                return 'py-2';
             }
         }));
     }, [columns, filters, conditionalFormatRules]);
@@ -229,7 +234,7 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
     return (
         <div className="h-full flex flex-col gap-4">
             <div className="flex-none">
-                <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns.filter(c => c.key !== 'user')} />
+                <ConditionalFormattingManager rules={conditionalFormatRules} setRules={setConditionalFormatRules} columns={columns.filter(c => !['details', 'user', 'difference_list', 'payload'].includes(c.key))} />
             </div>
             <div className="flex-grow min-h-0">
                 <DataGrid
