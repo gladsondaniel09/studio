@@ -61,8 +61,8 @@ const defaultColumns: readonly Column<ProcessedAuditEvent>[] = [
     { key: 'entity_name', name: 'Entity Name', resizable: true, sortable: true, width: 150 },
     { key: 'action', name: 'Action', resizable: true, sortable: true, width: 120 },
     { key: 'user', name: 'User', resizable: true, sortable: true, width: 200, formatter: ({row}) => row.user?.name || 'N/A' },
-    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: true, formatter: ({row}) => <div className="line-clamp-2">{row.difference_list}</div> },
-    { key: 'payload', name: 'Payload', resizable: true, sortable: true, formatter: ({row}) => <div className="line-clamp-2">{row.payload}</div> },
+    { key: 'difference_list', name: 'Difference List', resizable: true, sortable: true, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.difference_list}</div> },
+    { key: 'payload', name: 'Payload', resizable: true, sortable: true, width: 300, cellClass: 'whitespace-pre-wrap break-words', formatter: ({row}) => <div className="line-clamp-2">{row.payload}</div> },
     { key: 'details', name: 'Details', width: 80, resizable: false, formatter: ({row}) => (
         <Dialog>
             <DialogTrigger asChild>
@@ -214,16 +214,16 @@ export default function AdvancedDataTable({ data }: AdvancedDataTableProps) {
                         case 'ends_with': if(cellValue.endsWith(ruleValue)) match = true; break;
                     }
                     if(match) {
-                        // This callback is executed for each cell. It must return an object with style properties.
-                        // Note: Tailwind does not support dynamic class names like `bg-[${rule.color}]`
-                        // so we must use inline styles.
                         return (row) => {
                             return {
                                 backgroundColor: rule.color,
-                                color: '#ffffff', // A simple contrast logic might be needed here
+                                color: '#000000', // A simple contrast logic might be needed here
                             };
                         };
                     }
+                }
+                if (col.key === 'difference_list' || col.key === 'payload') {
+                    return 'py-2 whitespace-pre-wrap break-words';
                 }
                 return 'py-2';
             }
