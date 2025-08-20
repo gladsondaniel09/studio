@@ -42,12 +42,27 @@ export async function analyzeLogIncident(
     const logs = input.logs.length > 15000 
       ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
       : input.logs;
+    
+    const prompt = `You are a senior QA engineer creating a bug report. Analyze these logs and return ONLY a valid JSON object with these exact fields:
+- title: A concise title for the identified issue.
+- summary: A brief summary of the problem.
+- steps_to_replicate: An array of strings describing how to replicate the issue.
+- observed_behavior: A string describing the incorrect behavior that was observed.
+- potential_cause: A string describing the likely technical cause of the issue.
+
+Return ONLY the JSON object. No markdown, no code blocks, no extra text.
+
+Example:
+{"title":"Trade Fails to Update on Price Change","summary":"When a user attempts to update the price of an existing trade, the change is not saved, and the UI reverts to the old price.","steps_to_replicate":["1. Navigate to the 'Trades' screen.","2. Open an existing trade with ID 'T-100045'.","3. Change the 'price' field from 98.25 to 99.1.","4. Click the 'Save' button."],"observed_behavior":"The system shows a success notification, but the trade price remains at 98.25 after the page reloads. The 'difference_list' in the audit log shows the attempted change.","potential_cause":"The backend service for updating trades might have a validation error that is not being surfaced to the UI, or there could be a database transaction rollback."}
+
+Logs to analyze:
+${logs}`;
 
     const requestBody = {
       model: 'sonar',
       messages: [{
         role: 'user',
-        content: `Analyze these logs and return ONLY valid JSON with fields: severity, suspected_component, error_signature, time_range (start/end ISO), impacted_entities, probable_causes, recommended_steps, confidence (0-1). No markdown.\n\nLogs: ${logs}`
+        content: prompt,
       }],
       temperature: 0.2,
       max_tokens: 1200
