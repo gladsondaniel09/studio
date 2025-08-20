@@ -42,7 +42,7 @@ import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema } from '@/lib/types';
-import AuditTable from './audit-table';
+import AdvancedDataTable from './advanced-data-table';
 import { format } from 'date-fns';
 
 
@@ -984,7 +984,7 @@ export default function AuditTimeline() {
                         {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
                         Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
                     </Button>
-                    <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={() => setSortType(type => type === 'logical' ? 'timestamp' : 'logical')} className="w-full sm:w-auto">
+                    <Button variant={sortType === 'logical' ? 'default' : 'outline'} onClick={() => setSortType(type => type === 'logical' ? 'timestamp' : 'logical')} className="w-full sm:w-auto" disabled>
                         <Wand2 className="mr-2 h-4 w-4" />
                         Magic Sort
                     </Button>
@@ -1051,7 +1051,7 @@ export default function AuditTimeline() {
                 })}
                 </VerticalTimeline>
             ) : (
-                <AuditTable data={filteredData} />
+                <AdvancedDataTable data={filteredData} />
             )}
           </div>
       </div>
@@ -1093,10 +1093,10 @@ export default function AuditTimeline() {
                     <div className="w-full mt-4 space-y-2">
                         {fileName && !isProcessingFile && <p className="text-sm font-medium text-center">Selected file: {fileName}</p>}
                         {isProcessingFile && (
-                            <>
-                                <p className="text-sm font-medium text-muted-foreground">Processing: {fileName}</p>
+                            <div className='space-y-2'>
+                                <p className="text-sm font-medium text-muted-foreground text-center">Processing: {fileName}</p>
                                 <Progress value={uploadProgress} className="w-full" />
-                            </>
+                            </div>
                         )}
                     </div>
 
