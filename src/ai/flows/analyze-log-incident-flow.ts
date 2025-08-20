@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI flow for analyzing audit logs to extract incident details.
@@ -28,14 +29,32 @@ function createTimeoutSignal(ms: number) {
   return { signal: controller.signal, cancel: () => clearTimeout(id) };
 }
 
-function safeJsonParse(text: string) {
-  const cleaned = text
-    .trim()
-    .replace(/^\uFEFF/, '') // strip BOM if present
-    .replace(/^```json\n/, '')
-    .replace(/\n```$/, '')
-    .trim();
-  return JSON.parse(cleaned);
+function safeJsonParse(text: string): object {
+    // Attempt to find the JSON object within the text using a regular expression.
+    // This is more robust against extra text or markdown fences.
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch && jsonMatch[0]) {
+        try {
+            return JSON.parse(jsonMatch[0]);
+        } catch (e) {
+            // The matched text is not valid JSON, fall through to the old method.
+        }
+    }
+
+    // Fallback to the original cleaning method if regex fails or matched JSON is invalid.
+    const cleaned = text
+        .trim()
+        .replace(/^\uFEFF/, '') // strip BOM if present
+        .replace(/^```json\s*/, '')
+        .replace(/\s*```$/, '')
+        .trim();
+        
+    try {
+        return JSON.parse(cleaned);
+    } catch(e) {
+        // If all parsing fails, throw an error to be caught by the flow's error handler.
+        throw new Error('Failed to parse JSON from model output.');
+    }
 }
 
 function truncateLogs(raw: string) {
@@ -120,9 +139,6 @@ const analyzeLogIncidentFlow = ai.defineFlow(
       logs: truncateLogs(input.logs),
     };
 
-    // Optional: log presence of API key once during init (comment out after verifying)
-    // console.log('Perplexity key present:', !!process.env.PERPLEXITY_API_KEY);
-
     let attempt = 0;
     let lastErr: any;
 
@@ -132,7 +148,6 @@ const analyzeLogIncidentFlow = ai.defineFlow(
       let raw = '';
 
       try {
-        // If your Genkit version supports per-call options, use withConfig
         const invoke = (prompt as any).withConfig
           ? (prompt as any).withConfig({
               model: MODEL_ID,
@@ -152,33 +167,22 @@ const analyzeLogIncidentFlow = ai.defineFlow(
         return validated;
       } catch (err: any) {
         lastErr = err;
-        // Server-side diagnostics only; keep concise to avoid noisy logs.
         const zodIssues = err?.issues ? formatZodIssues(err.issues) : undefined;
         console.error('analyzeLogIncidentFlow attempt failed', {
           attempt,
           message: err?.message,
           name: err?.name,
           zodIssues,
-          // Show a small preview of raw model output for debugging
           rawPreview:
-            typeof err?.rawOutput === 'string'
-              ? err.rawOutput.slice(0, 600)
-              : undefined,
+            typeof raw === 'string'
+              ? raw.slice(0, 600)
+              : JSON.stringify(raw).slice(0,600),
         });
-        // attach raw output if parse/validation failed
-        if (!err.rawOutput) {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-            err.rawOutput = (typeof (err as any).raw === 'string'
-              ? (err as any).raw
-              : raw) as any;
-          } catch {}
-        }
-        // Retry only on first failure and if error is likely transient or parse-related
+        
         const retriable =
           err?.name === 'AbortError' ||
           /timeout|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(err?.message || '') ||
-          typeof raw === 'string'; // parsing/format issues may succeed on retry
+          err?.message?.includes('Failed to parse JSON');
 
         if (!(ENABLE_RETRY && attempt < 2 && retriable)) break;
       }
