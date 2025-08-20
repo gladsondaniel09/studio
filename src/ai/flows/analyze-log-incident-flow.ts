@@ -133,6 +133,7 @@ ${preparedLogs}`;
         message: err?.message,
         name: err?.name,
         stack: err?.stack,
+        zodIssues: err?.issues,
       });
       // Re-throw a user-friendly error
       throw new Error('Failed to analyze logs. Please try again with fewer logs or adjust the input.');
