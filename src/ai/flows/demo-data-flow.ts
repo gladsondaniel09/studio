@@ -22,6 +22,7 @@ export async function generateDemoData(): Promise<DemoDataOutput> {
 const prompt = ai.definePrompt({
   name: 'generateDemoDataPrompt',
   output: {schema: DemoDataOutputSchema},
+  model: "llama-3-sonar-large-32k-online",
   prompt: `You are an expert in generating realistic sample data for an audit log viewer application.
 
   Generate a diverse list of 15 sample audit log events. Ensure the events cover all action types: 'create', 'update', and 'delete'.
