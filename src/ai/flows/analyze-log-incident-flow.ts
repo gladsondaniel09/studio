@@ -1,37 +1,58 @@
-
 'use server';
 /**
  * @fileOverview An AI flow for analyzing audit logs to extract incident details.
- * 
+ *
  * - analyzeLogIncident - A function that takes a string of logs and returns a structured incident analysis.
  */
 
 import { ai } from '@/ai/genkit';
-import { IncidentAnalysisInputSchema, IncidentAnalysisOutputSchema, type IncidentAnalysisInput, type IncidentAnalysisOutput } from '@/lib/types';
+import {
+  IncidentAnalysisInputSchema,
+  IncidentAnalysisOutputSchema,
+  type IncidentAnalysisInput,
+  type IncidentAnalysisOutput,
+} from '@/lib/types';
 
-
-export async function analyzeLogIncident(input: IncidentAnalysisInput): Promise<IncidentAnalysisOutput> {
+export async function analyzeLogIncident(
+  input: IncidentAnalysisInput
+): Promise<IncidentAnalysisOutput> {
   return analyzeLogIncidentFlow(input);
 }
 
 const prompt = ai.definePrompt({
-    name: 'analyzeLogIncidentPrompt',
-    input: { schema: IncidentAnalysisInputSchema },
-    output: { schema: IncidentAnalysisOutputSchema },
-    model: "llama-3-sonar-large-32k-online",
-    prompt: `You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
+  name: 'analyzeLogIncidentPrompt',
+  input: { schema: IncidentAnalysisInputSchema },
+  output: { schema: IncidentAnalysisOutputSchema },
+  model: 'sonar',
+  // Keep the “system” guidance up front and make the model return only JSON.
+  prompt: `System:
+You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
+Return ONLY a valid JSON object that conforms to the specified fields. Do not include markdown, code fences, or commentary.
 
-Analyze the following audit logs provided by the user. Your task is to identify a potential operational incident, determine its root cause, assess its impact, and recommend actionable steps for resolution.
+Task:
+Analyze the following audit logs. Identify a potential operational incident, determine its root cause, assess its impact, and recommend actionable steps for resolution.
 
-Based on the logs, return a valid JSON object with the following fields:
-- severity: The overall severity of the incident (e.g., 'High', 'Medium', 'Low').
-- suspected_component: The application component most likely causing the issue.
-- error_signature: A unique, concise signature or hash for the primary error.
-- time_range: An object with 'start' and 'end' ISO timestamps for the incident.
-- impacted_entities: An array of strings listing the entities (e.g., trades, users, entities by name) impacted by the incident.
-- probable_causes: An array of strings describing the probable root causes.
-- recommended_steps: An array of strings listing actionable steps to mitigate or resolve the incident.
-- confidence: Your confidence in this analysis, as a number from 0.0 to 1.0.
+Output fields (must be present):
+- severity: "High" | "Medium" | "Low"
+- suspected_component: string
+- error_signature: string
+- time_range: { "start": ISO8601 string, "end": ISO8601 string }
+- impacted_entities: string[]
+- probable_causes: string[]
+- recommended_steps: string[]
+- confidence: number between 0.0 and 1.0
+
+Example (structure only; adjust values to the logs):
+{
+  "severity": "High",
+  "suspected_component": "Risk Engine",
+  "error_signature": "ERR-RISK-VAL-001",
+  "time_range": { "start": "2025-08-20T12:00:00Z", "end": "2025-08-20T12:15:00Z" },
+  "impacted_entities": ["Trade#12345", "User:jsmith"],
+  "probable_causes": ["Null pointer in valuation path"],
+  "recommended_steps": ["Restart risk service", "Purge cache", "Re-run EOD valuation"],
+  "confidence": 0.82
+}
 
 Logs to analyze:
 {{{logs}}}
@@ -45,10 +66,48 @@ const analyzeLogIncidentFlow = ai.defineFlow(
     outputSchema: IncidentAnalysisOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
-    if (!output) {
-      throw new Error('Failed to get a valid analysis from the AI model.');
+    // Guard: require logs
+    if (!input?.logs || input.logs.trim().length === 0) {
+      throw new Error('logs is required and cannot be empty.');
     }
-    return output;
+
+    try {
+      const { output } = await prompt(input);
+
+      if (!output) {
+        throw new Error('Model returned no output.');
+      }
+
+      // Some Genkit setups return text; others already coerce to the declared schema.
+      // Safely handle both cases.
+      const maybeParsed =
+        typeof output === 'string' ? safeJsonParse(output) : output;
+
+      // Validate against your declared output schema (throws if invalid).
+      const validated = IncidentAnalysisOutputSchema.parse(maybeParsed);
+
+      return validated;
+    } catch (err: any) {
+      // Improve debuggability without leaking secrets.
+      console.error('analyzeLogIncidentFlow error', {
+        message: err?.message,
+        cause: err?.cause,
+        stack: err?.stack,
+      });
+      throw new Error(
+        'Failed to analyze logs. Please try again with fewer logs or adjust the input.'
+      );
+    }
   }
 );
+
+// ---- helpers ----
+function safeJsonParse(text: string) {
+  // Strip common accidental wrappers like code fences if any slip through.
+  const cleaned = text
+    .trim()
+    .replace(/^```json\n/, '')
+    .replace(/\n```$/, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
