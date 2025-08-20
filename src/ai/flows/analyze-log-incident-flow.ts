@@ -18,7 +18,6 @@ const prompt = ai.definePrompt({
     name: 'analyzeLogIncidentPrompt',
     input: { schema: IncidentAnalysisInputSchema },
     output: { schema: IncidentAnalysisOutputSchema },
-    model: 'llama-3-sonar-large-32k-online',
     prompt: `You are a senior application support engineer for a commodity trading and risk management (CTRM/ETRM) platform. Your expertise covers trade capture, pricing, risk management, scheduling, nominations, and financial settlement.
 
 Analyze the following audit logs provided by the user. Your task is to identify a potential operational incident, determine its root cause, assess its impact, and recommend actionable steps for resolution.
