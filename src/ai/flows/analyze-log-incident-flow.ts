@@ -93,14 +93,16 @@ ${logs}`;
     // Parse response
     const data = await response.json();
     
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    if (!data.choices || !data.choices[0]) {
       throw new Error(`Invalid API response structure: ${JSON.stringify(data)}`);
     }
 
-    const content = data.choices[0].message.content;
-    if (!content) {
+    const message = data.choices[0].message;
+    if (!message || !message.content) {
       throw new Error('No content in API response');
     }
+    const content = message.content;
+
 
     // Clean and parse JSON
     const cleanContent = content.trim()
