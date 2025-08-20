@@ -141,13 +141,14 @@ const analyzeLogIncidentFlow = ai.defineFlow(
 
     let attempt = 0;
     let lastErr: any;
-
+    
     while (attempt < (ENABLE_RETRY ? 2 : 1)) {
       attempt++;
-      const { signal, cancel } = createTimeoutSignal(REQUEST_TIMEOUT_MS);
       let raw = '';
 
       try {
+        const { signal, cancel } = createTimeoutSignal(REQUEST_TIMEOUT_MS);
+        
         const invoke = (prompt as any).withConfig
           ? (prompt as any).withConfig({
               model: MODEL_ID,
@@ -157,34 +158,35 @@ const analyzeLogIncidentFlow = ai.defineFlow(
 
         const { output } = await invoke(preparedInput);
 
+        cancel();
+        
         if (!output) throw new Error('Model returned no output.');
 
         raw = typeof output === 'string' ? output : JSON.stringify(output);
         const maybeParsed = typeof output === 'string' ? safeJsonParse(output) : output;
 
         const validated = IncidentAnalysisOutputSchema.parse(maybeParsed);
-        cancel();
         return validated;
       } catch (err: any) {
         lastErr = err;
-        const zodIssues = err?.issues ? formatZodIssues(err.issues) : undefined;
-        console.error('analyzeLogIncidentFlow attempt failed', {
-          attempt,
-          message: err?.message,
-          name: err?.name,
-          zodIssues,
-          rawPreview:
-            typeof raw === 'string'
-              ? raw.slice(0, 600)
-              : JSON.stringify(raw).slice(0,600),
+        // Print everything we need ONCE
+        console.error('[analyze] failure details:', {
+            message: err?.message,
+            name: err?.name,
+            zodIssues: err?.issues
+            ? err.issues.map((i: any) => ({ path: i.path, message: i.message }))
+            : undefined,
+            rawPreview: raw ? raw.slice(0, 1200) : undefined,
         });
-        
+
         const retriable =
           err?.name === 'AbortError' ||
           /timeout|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(err?.message || '') ||
           err?.message?.includes('Failed to parse JSON');
 
-        if (!(ENABLE_RETRY && attempt < 2 && retriable)) break;
+        if (!(ENABLE_RETRY && attempt < 2 && retriable)) {
+             break;
+        }
       }
     }
 
