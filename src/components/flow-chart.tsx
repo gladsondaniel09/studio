@@ -27,7 +27,7 @@ const flowStages = [
     entities: ['tradecost', 'cost', 'cashflow'],
   },
   {
-    name: 'Container Shipment',
+    name: 'Planning',
     icon: Ship,
     entities: ['shipment', 'container'],
   },
@@ -47,7 +47,7 @@ const flowStages = [
     entities: ['pricing', 'price'],
   },
   {
-    name: 'Commercial Invoice',
+    name: 'Invoice',
     icon: FileText,
     entities: ['invoice'],
   },
