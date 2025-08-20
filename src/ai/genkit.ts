@@ -6,8 +6,8 @@ export const ai = genkit({
     openAI({
       apiKey: process.env.PERPLEXITY_API_KEY,
       apiHost: 'https://api.perplexity.ai',
+      model: 'llama-3-sonar-large-32k-online',
     }),
   ],
   logLevel: 'debug',
-  model: 'openai/llama-3-sonar-large-32k-online',
 });
