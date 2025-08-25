@@ -1,10 +1,13 @@
 
 'use server';
 
+import { ai } from '@/ai/genkit';
 import {
   type IncidentAnalysisInput,
   type IncidentAnalysisOutput,
+  IncidentAnalysisOutputSchema,
 } from '@/lib/types';
+import { z } from 'zod';
 
 // Temporary debug helper - logs to server console and returns safe error
 function logAndThrowSafe(error: any, context: string) {
@@ -13,12 +16,12 @@ function logAndThrowSafe(error: any, context: string) {
     message: error?.message || 'Unknown error',
     name: error?.name,
     stack: error?.stack?.split('\n')[0], // Just first line
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
-  
+
   // This will show in your production server logs
-  console.error('[INCIDENT_ANALYSIS_ERROR]', JSON.stringify(errorInfo));
-  
+  console.error('[INCIDENT_ANALYSIS_ERROR]', JSON.stringify(errorInfo, null, 2));
+
   // Throw a safe error for the client
   throw new Error(`Analysis failed at ${context}. Check server logs for details.`);
 }
@@ -26,24 +29,16 @@ function logAndThrowSafe(error: any, context: string) {
 export async function analyzeLogIncident(
   input: IncidentAnalysisInput
 ): Promise<IncidentAnalysisOutput> {
-  
   try {
-    // Step 1: Input validation
     if (!input?.logs?.trim()) {
-      logAndThrowSafe(new Error('Empty logs'), 'input_validation');
+      throw new Error('Input logs are empty.');
     }
 
-    // Step 2: Environment check
-    const apiKey = process.env.PERPLEXITY_API_KEY;
-    if (!apiKey) {
-      logAndThrowSafe(new Error('API key missing'), 'env_check');
-    }
+    const logs =
+      input.logs.length > 15000
+        ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
+        : input.logs;
 
-    // Step 3: Prepare request
-    const logs = input.logs.length > 15000 
-      ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
-      : input.logs;
-    
     const prompt = `You are a senior QA engineer creating a bug report. Analyze these logs and return ONLY a valid JSON object with these exact fields:
 - title: A concise title for the identified issue.
 - summary: A brief summary of the problem.
@@ -59,86 +54,46 @@ Example:
 Logs to analyze:
 ${logs}`;
 
-    const requestBody = {
-      model: 'sonar',
-      messages: [{
-        role: 'user',
-        content: prompt,
-      }],
-      temperature: 0.2,
-      max_tokens: 1200
-    };
-
-    // Step 4: API call
-    let response: Response | undefined;
-    try {
-      response = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-    } catch (fetchError) {
-      logAndThrowSafe(fetchError, 'api_fetch');
+    const { text } = await ai.generate({
+      model: 'openai/sonar',
+      prompt: prompt,
+      config: {
+        temperature: 0.2,
+        maxOutputTokens: 1200,
+      },
+      output: {
+        format: 'json',
+        schema: IncidentAnalysisOutputSchema,
+      },
+    });
+    
+    if (!text) {
+        throw new Error('No content returned from AI analysis.');
     }
-
-    // Step 5: Response check
-    if (!response!.ok) {
-      try {
-        const errorText = await response!.text();
-        logAndThrowSafe(new Error(`API ${response!.status}: ${errorText}`), 'api_response');
-      } catch {
-        logAndThrowSafe(new Error(`API ${response!.status}: Unable to read error`), 'api_response');
-      }
-    }
-
-    // Step 6: JSON parsing
-    let data;
-    try {
-      data = await response!.json();
-    } catch (jsonError) {
-      logAndThrowSafe(jsonError, 'response_json_parse');
-    }
-
-    // Step 7: Extract content
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) {
-      logAndThrowSafe(new Error(`No content in response: ${JSON.stringify(data)}`), 'content_extraction');
-    }
-
-    // Step 8: Clean and parse content
+    
+    // The output from ai.generate with format: 'json' is already a parsed object
+    // but we can re-parse to be safe, especially if the model doesn't respect instructions perfectly.
     let parsed;
     try {
-      const cleanContent = content!.trim()
-        .replace(/^```json/i, '')
-        .replace(/```$/i, '')
-        .trim();
-      parsed = JSON.parse(cleanContent);
-    } catch (parseError) {
-      logAndThrowSafe(new Error(`Parse failed. Content: ${content!.slice(0, 200)}`), 'content_parse');
+        parsed = JSON.parse(text);
+    } catch(e) {
+        // If it's not valid JSON, it might be the object was returned directly.
+        // Let's see if the text itself validates against the schema.
+        try {
+            const validationResult = IncidentAnalysisOutputSchema.parse(text);
+            return validationResult;
+        } catch (zodErr) {
+             throw new Error(`Failed to parse AI response. Content: ${text.slice(0, 200)}`);
+        }
     }
 
-    // Step 9: Schema validation
-    try {
-      const { IncidentAnalysisOutputSchema } = await import('@/lib/types');
-      return IncidentAnalysisOutputSchema.parse(parsed);
-    } catch (zodError: any) {
-      const issues = zodError.issues?.map((i: any) => `${i.path.join('.')}: ${i.message}`).join(', ') || 'Unknown validation error';
-      logAndThrowSafe(new Error(`Schema validation: ${issues}`), 'schema_validation');
-    }
+
+    const validationResult = IncidentAnalysisOutputSchema.parse(parsed);
+    return validationResult;
 
   } catch (error) {
-    // If it's already our safe error, re-throw
-    if (error instanceof Error && error.message.includes('Check server logs')) {
-      throw error;
-    }
-    // Otherwise, log and make safe
-    logAndThrowSafe(error, 'unexpected');
+    logAndThrowSafe(error, 'analyzeLogIncident');
+    // This line will not be reached due to the throw in logAndThrowSafe, but it satisfies TypeScript
+    throw error;
   }
-  
-  // This line should not be reachable if all paths throw an error on failure.
-  // Adding it to satisfy TypeScript's return type requirement.
-  throw new Error('Reached end of function without returning a value. This should not happen.');
 }
