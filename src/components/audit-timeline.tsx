@@ -740,8 +740,11 @@ export default function AuditTimeline() {
         setShowAnalysisDialog(true);
 
         try {
-            // Convert the filtered data to a simple string format for the prompt
-            const logString = filteredData.map(e => JSON.stringify({
+            // Take the most recent 200 events for analysis to keep payload reasonable
+            const dataForAnalysis = filteredData.slice(0, 200);
+
+            // Convert the sampled data to a simple string format for the prompt
+            const logString = dataForAnalysis.map(e => JSON.stringify({
                 timestamp: e.created_timestamp,
                 action: e.action,
                 entity: e.entity_name,
@@ -975,10 +978,8 @@ export default function AuditTimeline() {
                     </VerticalTimeline>
                 </ScrollArea>
             ) : (
-                <div className="border rounded-lg overflow-hidden h-full">
-                    <ScrollArea className="h-full">
-                        <DataTable data={filteredData} />
-                    </ScrollArea>
+                <div className="border rounded-lg overflow-hidden h-full flex flex-col">
+                    <DataTable data={filteredData} />
                 </div>
             )}
           </div>

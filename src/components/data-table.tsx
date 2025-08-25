@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -15,6 +15,7 @@ import { ChevronDown, ChevronRight, ArrowUpDown } from 'lucide-react';
 import { ProcessedAuditEvent, renderDetails } from './audit-timeline';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from './ui/scroll-area';
 
 interface DataTableProps {
   data: ProcessedAuditEvent[];
@@ -61,6 +62,8 @@ const DataTableRow = ({ event }: { event: ProcessedAuditEvent }) => {
 export function DataTable({ data }: DataTableProps) {
   const [sortColumn, setSortColumn] = useState<SortableColumn>('created_timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(50);
 
   const handleSort = (column: SortableColumn) => {
     if (sortColumn === column) {
@@ -69,7 +72,12 @@ export function DataTable({ data }: DataTableProps) {
       setSortColumn(column);
       setSortDirection('asc');
     }
+    setCurrentPage(1); // Reset to first page on sort
   };
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data]);
 
   const sortedData = useMemo(() => {
     if (!sortColumn) return data;
@@ -81,7 +89,11 @@ export function DataTable({ data }: DataTableProps) {
       if (sortColumn === 'user.name') {
         aValue = a.user?.name || '';
         bValue = b.user?.name || '';
-      } else {
+      } else if (sortColumn === 'created_timestamp') {
+        aValue = new Date(a.created_timestamp).getTime();
+        bValue = new Date(b.created_timestamp).getTime();
+      }
+      else {
         aValue = a[sortColumn as keyof ProcessedAuditEvent];
         bValue = b[sortColumn as keyof ProcessedAuditEvent];
       }
@@ -95,6 +107,13 @@ export function DataTable({ data }: DataTableProps) {
       return 0;
     });
   }, [data, sortColumn, sortDirection]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return sortedData.slice(startIndex, startIndex + rowsPerPage);
+  }, [sortedData, currentPage, rowsPerPage]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   
   const columns: { key: SortableColumn; label: string; }[] = [
       { key: 'created_timestamp', label: 'Timestamp' },
@@ -106,33 +125,62 @@ export function DataTable({ data }: DataTableProps) {
   ];
 
   return (
-    <div className="w-full h-full">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[50px]"></TableHead>
-              {columns.map(col => (
-                <TableHead key={col.key}>
-                    <Button variant="ghost" onClick={() => handleSort(col.key)}>
-                        {col.label}
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
+    <div className="w-full h-full flex flex-col">
+        <div className="flex-grow overflow-hidden">
+            <ScrollArea className="h-full">
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead className="w-[50px]"></TableHead>
+                    {columns.map(col => (
+                        <TableHead key={col.key}>
+                            <Button variant="ghost" onClick={() => handleSort(col.key)}>
+                                {col.label}
+                                <ArrowUpDown className="ml-2 h-4 w-4" />
+                            </Button>
+                        </TableHead>
+                    ))}
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {paginatedData.length > 0 ? (
+                    paginatedData.map((event, index) => <DataTableRow key={index} event={event} />)
+                    ) : (
+                    <TableRow>
+                        <TableCell colSpan={7} className="h-24 text-center">
+                        No results found.
+                        </TableCell>
+                    </TableRow>
+                    )}
+                </TableBody>
+                </Table>
+            </ScrollArea>
+        </div>
+        {totalPages > 1 && (
+            <div className="flex-shrink-0 flex items-center justify-between p-2 border-t">
+                <p className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                </p>
+                <div className="flex gap-2">
+                    <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                    >
+                        Previous
                     </Button>
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sortedData.length > 0 ? (
-              sortedData.map((event, index) => <DataTableRow key={index} event={event} />)
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center">
-                  No results found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                    </Button>
+                </div>
+            </div>
+        )}
     </div>
   );
 }
