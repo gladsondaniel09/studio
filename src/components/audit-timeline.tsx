@@ -34,7 +34,6 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion"
-import { generateDemoData } from '@/ai/flows/demo-data-flow';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
@@ -572,7 +571,6 @@ export default function AuditTimeline() {
   const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [selectedFlowEntities, setSelectedFlowEntities] = useState<string[] | null>(null);
   const { toast } = useToast();
   const [showUploadWalkthrough, setShowUploadWalkthrough] = useState(false);
@@ -608,11 +606,6 @@ export default function AuditTimeline() {
       element: '#upload-card',
       title: 'Upload Your Data',
       content: 'Start by uploading a CSV file of your audit logs. You can drag and drop a file or click here to select one.',
-    },
-    {
-      element: '#demo-button',
-      title: 'Or View a Demo',
-      content: 'Don\'t have a file? Click here to generate some sample data and see how the timeline works.',
     },
   ];
 
@@ -711,38 +704,6 @@ export default function AuditTimeline() {
           }
       });
   };
-
-  const handleDemo = async () => {
-    setIsDemoLoading(true);
-    setError(null);
-    try {
-      const demoData = await generateDemoData();
-      const validatedData = z.array(SampleEventSchema).safeParse(demoData.events);
-      if (validatedData.success) {
-        const processed = processAuditData(validatedData.data);
-        setData(processed);
-        setView('timeline');
-      } else {
-        console.error(validatedData.error);
-        setError('AI-generated data does not match the expected format. Please try again.');
-        toast({
-            variant: 'destructive',
-            title: 'Error Parsing Demo Data',
-            description: 'The format of the AI-generated data was invalid.',
-        });
-      }
-    } catch (e: any) {
-        console.error(e);
-        setError('Failed to generate demo data. Please try again.');
-        toast({
-            variant: 'destructive',
-            title: 'Error Generating Demo',
-            description: e.message || 'An unexpected error occurred.',
-        });
-    } finally {
-        setIsDemoLoading(false);
-    }
-  }
 
   const handleUploadNew = () => {
     setView('upload');
@@ -1076,21 +1037,6 @@ export default function AuditTimeline() {
                         {isProcessingFile ? 'Processing...' : 'View Timeline'}
                     </Button>
                 </div>
-                
-                <div className="w-full flex items-center gap-2">
-                    <hr className="w-full border-border"/>
-                    <span className="text-xs text-muted-foreground">OR</span>
-                    <hr className="w-full border-border"/>
-                </div>
-
-                <Button id="demo-button" onClick={handleDemo} disabled={isDemoLoading} className="w-full">
-                    {isDemoLoading ? (
-                        <Loader className="mr-2 animate-spin" />
-                    ) : (
-                        <Sparkles className="mr-2" />
-                    )}
-                    View Demo
-                </Button>
                 
                 {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             </CardContent>

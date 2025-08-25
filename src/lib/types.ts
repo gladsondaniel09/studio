@@ -18,11 +18,6 @@ export const SampleEventSchema = z.object({
 
 export type AuditEvent = z.infer<typeof SampleEventSchema>;
 
-const DemoDataOutputSchema = z.object({
-  events: z.array(SampleEventSchema),
-});
-export type DemoDataOutput = z.infer<typeof DemoDataOutputSchema>;
-
 
 const SortEventsInputSchema = z.object({
   events: z.array(z.any()),
