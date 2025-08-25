@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -578,7 +579,6 @@ export default function AuditTimeline() {
   const [showTimelineWalkthrough, setShowTimelineWalkthrough] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const progressIntervalRef = useRef<NodeJS.Timeout>();
   const [activeView, setActiveView] = useState<'timeline' | 'table'>('timeline');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
@@ -665,26 +665,26 @@ export default function AuditTimeline() {
       }
       setIsProcessingFile(true);
       setUploadProgress(0);
+      const results: any[] = [];
 
-      progressIntervalRef.current = setInterval(() => {
-        setUploadProgress(prev => {
-            if (prev >= 95) {
-                if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
-                return 95;
-            }
-            return prev + 5;
-        })
-      }, 100);
-      
       Papa.parse(file, {
           header: true,
           skipEmptyLines: true,
-          complete: (results) => {
-              if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+          worker: true, // Use a web worker to avoid blocking the main thread
+          step: (step, parser) => {
+              // step.data contains one row
+              results.push(step.data);
+
+              // Update progress
+              if (file.size) {
+                const progress = (step.meta.cursor / file.size) * 100;
+                setUploadProgress(progress);
+              }
+          },
+          complete: () => {
               setUploadProgress(100);
 
-              const parsedData = results.data as any[];
-              const validData = parsedData.filter(row => row.created_timestamp && row.action);
+              const validData = results.filter(row => row.created_timestamp && row.action);
               if (validData.length === 0) {
                   setError('CSV file is empty, invalid, or does not contain required "created_timestamp" and "action" columns.');
                   setView('upload');
@@ -705,7 +705,6 @@ export default function AuditTimeline() {
               setTimeout(() => setIsProcessingFile(false), 500);
           },
           error: (err: any) => {
-              if(progressIntervalRef.current) clearInterval(progressIntervalRef.current);
               setError('Failed to parse CSV file: ' + err.message);
               setView('upload');
               setIsProcessingFile(false);
