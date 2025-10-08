@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
@@ -254,7 +253,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
     const hasRawDetails = payload !== "NULL" || difference_list !== "NULL";
 
     return (
-        <div className="space-y-4 p-4">
+        <div className="p-4">
             {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
             
             {hasRawDetails && (
@@ -682,11 +681,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                       {isExpanded && (
                           <tr className="bg-muted/50">
                               <td colSpan={headers.length + 1}>
-                                 <div className="h-96">
-                                     <ScrollArea className="h-full w-full p-1">
-                                        {renderDetails(event)}
-                                     </ScrollArea>
-                                 </div>
+                                  {renderDetails(event)}
                               </td>
                           </tr>
                       )}
@@ -1120,10 +1115,12 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                    <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh] flex flex-col">
-                                        <DialogHeader><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                        <ScrollArea className="h-full w-full p-1 -mx-6">
+                                    <DialogContent className="max-w-4xl w-full p-0">
+                                        <ScrollArea className="max-h-[80vh]">
+                                          <div className='p-6'>
+                                            <DialogHeader><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
                                             {renderDetails(event)}
+                                          </div>
                                         </ScrollArea>
                                     </DialogContent>
                                 </Dialog>
