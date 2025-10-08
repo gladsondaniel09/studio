@@ -565,6 +565,14 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
+const TruncatedCell = ({ value }: { value: any }) => {
+    const text = String(value ?? 'NULL');
+    return (
+        <div className="max-w-[200px] truncate" title={text}>
+            {text}
+        </div>
+    );
+};
 
 const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name'>('created_timestamp');
@@ -632,6 +640,8 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
     { label: 'User', key: 'user.name'},
+    { label: 'Difference List', key: 'difference_list' },
+    { label: 'Payload', key: 'payload' },
   ]
 
   return (
@@ -668,6 +678,8 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                         <td className="p-2">{event.entity_name}</td>
                         <td className="p-2">{event.action}</td>
                         <td className="p-2">{event.user?.name || 'N/A'}</td>
+                        <td className="p-2 font-mono text-xs"><TruncatedCell value={event.difference_list} /></td>
+                        <td className="p-2 font-mono text-xs"><TruncatedCell value={event.payload} /></td>
                       </tr>
                       {isExpanded && (
                           <tr className="bg-muted/50">
