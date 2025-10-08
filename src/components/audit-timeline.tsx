@@ -254,29 +254,27 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
     const hasRawDetails = payload !== "NULL" || difference_list !== "NULL";
 
     return (
-        <ScrollArea className="h-full w-full p-1">
-            <div className="space-y-4 p-4">
-                {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
-                
-                {hasRawDetails && (
-                    <Accordion type="single" collapsible className="w-full pt-4">
-                        <AccordionItem value="item-1">
-                            <AccordionTrigger>
-                                <div className="flex items-center gap-2">
-                                    <Code className="h-4 w-4" /> Raw Details
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    <RawJsonViewer jsonString={difference_list} title="difference_list (JSON)" />
-                                    <RawJsonViewer jsonString={payload} title="payload (JSON)" />
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    </Accordion>
-                )}
-            </div>
-        </ScrollArea>
+        <div className="space-y-4 p-4">
+            {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
+            
+            {hasRawDetails && (
+                <Accordion type="single" collapsible className="w-full pt-4">
+                    <AccordionItem value="item-1">
+                        <AccordionTrigger>
+                            <div className="flex items-center gap-2">
+                                <Code className="h-4 w-4" /> Raw Details
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <RawJsonViewer jsonString={difference_list} title="difference_list (JSON)" />
+                                <RawJsonViewer jsonString={payload} title="payload (JSON)" />
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            )}
+        </div>
     );
 }
 
@@ -685,7 +683,9 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                           <tr className="bg-muted/50">
                               <td colSpan={headers.length + 1}>
                                  <div className="h-96">
-                                     {renderDetails(event)}
+                                     <ScrollArea className="h-full w-full p-1">
+                                        {renderDetails(event)}
+                                     </ScrollArea>
                                  </div>
                               </td>
                           </tr>
@@ -1120,9 +1120,11 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                    <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh]">
+                                    <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh] flex flex-col">
                                         <DialogHeader><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                        {renderDetails(event)}
+                                        <ScrollArea className="h-full w-full p-1 -mx-6">
+                                            {renderDetails(event)}
+                                        </ScrollArea>
                                     </DialogContent>
                                 </Dialog>
                             </div>
@@ -1184,3 +1186,5 @@ export default function AuditTimeline() {
     </div>
   );
 }
+
+    
