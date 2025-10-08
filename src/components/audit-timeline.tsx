@@ -1,7 +1,8 @@
 
+
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import {
@@ -9,7 +10,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2 } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -44,6 +45,7 @@ import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/li
 import DataGrid from './data-grid';
 import { format } from 'date-fns';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
+import { cn } from '@/lib/utils';
 
 
 // Extend the AuditEvent type to include our pre-processed fields
@@ -569,6 +571,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
+  const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
   const handleSort = (column: keyof ProcessedAuditEvent | 'user.name') => {
     if (sortColumn === column) {
@@ -578,10 +581,19 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
       setSortDirection('asc');
     }
     setCurrentPage(1);
+    setExpandedRows({});
+  };
+
+  const toggleRow = (index: number) => {
+    setExpandedRows(prev => ({
+        ...prev,
+        [index]: !prev[index]
+    }));
   };
   
   useEffect(() => {
     setCurrentPage(1);
+    setExpandedRows({});
   }, [data]);
 
   const sortedData = useMemo(() => {
@@ -614,6 +626,13 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   }, [sortedData, currentPage, rowsPerPage]);
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+  
+  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name'}[] = [
+    { label: 'Timestamp', key: 'created_timestamp'},
+    { label: 'Entity', key: 'entity_name'},
+    { label: 'Action', key: 'action'},
+    { label: 'User', key: 'user.name'},
+  ]
 
   return (
     <div className="border rounded-lg overflow-hidden h-full flex flex-col">
@@ -621,25 +640,47 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0">
             <tr>
-              {['Timestamp', 'Entity', 'Action', 'User'].map(header => (
-                <th key={header} className="p-2 text-left font-semibold">
-                  <Button variant="ghost" onClick={() => handleSort(header.toLowerCase().replace(' ', '_') as any)}>
-                    {header}
-                    <ArrowDown className="w-3 h-3 ml-2" />
+              <th className="p-2 text-left font-semibold w-12"></th>
+              {headers.map(header => (
+                <th key={header.key} className="p-2 text-left font-semibold">
+                  <Button variant="ghost" onClick={() => handleSort(header.key)}>
+                    {header.label}
+                    {sortColumn === header.key && (
+                         sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
+                    )}
                   </Button>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {paginatedData.map((event, index) => (
-              <tr key={index} className="border-b">
-                <td className="p-2">{format(new Date(event.created_timestamp), 'PPpp')}</td>
-                <td className="p-2">{event.entity_name}</td>
-                <td className="p-2">{event.action}</td>
-                <td className="p-2">{event.user?.name || 'N/A'}</td>
-              </tr>
-            ))}
+            {paginatedData.map((event, index) => {
+              const isExpanded = expandedRows[index];
+              return (
+                  <Fragment key={index}>
+                      <tr className="border-b" >
+                        <td className="p-2">
+                           <Button variant="ghost" size="icon" onClick={() => toggleRow(index)} className="h-8 w-8">
+                                <ChevronRightIcon className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")} />
+                            </Button>
+                        </td>
+                        <td className="p-2">{format(new Date(event.created_timestamp), 'PPpp')}</td>
+                        <td className="p-2">{event.entity_name}</td>
+                        <td className="p-2">{event.action}</td>
+                        <td className="p-2">{event.user?.name || 'N/A'}</td>
+                      </tr>
+                      {isExpanded && (
+                          <tr className="bg-muted/50">
+                              <td colSpan={headers.length + 1}>
+                                 <div className="h-96">
+                                     {renderDetails(event)}
+                                 </div>
+                              </td>
+                          </tr>
+                      )}
+                  </Fragment>
+              )
+            })}
           </tbody>
         </table>
        </div>
