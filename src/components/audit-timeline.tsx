@@ -3,12 +3,13 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import {
   VerticalTimeline,
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Share2, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2 } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -40,9 +41,8 @@ import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/lib/types';
-import { DataTable } from './data-table';
+import DataGrid from './data-grid';
 import { format } from 'date-fns';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 
 
@@ -52,6 +52,9 @@ export type ProcessedAuditEvent = AuditEvent & {
     parsed_difference_list: any;
     searchable_text: string;
 };
+
+// Generic type for any row of data from an unknown file
+type GenericRow = { [key: string]: any };
 
 
 const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, title: string }) => {
@@ -561,8 +564,119 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
 };
 
 
+const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
+  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name'>('created_timestamp');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(50);
+
+  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name') => {
+    if (sortColumn === column) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+    setCurrentPage(1);
+  };
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data]);
+
+  const sortedData = useMemo(() => {
+    return [...data].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      if (sortColumn === 'user.name') {
+        aValue = a.user?.name || '';
+        bValue = b.user?.name || '';
+      } else {
+        aValue = a[sortColumn as keyof ProcessedAuditEvent];
+        bValue = b[sortColumn as keyof ProcessedAuditEvent];
+      }
+      
+      if (sortColumn === 'created_timestamp') {
+        aValue = new Date(aValue).getTime();
+        bValue = new Date(bValue).getTime();
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [data, sortColumn, sortDirection]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    return sortedData.slice(startIndex, startIndex + rowsPerPage);
+  }, [sortedData, currentPage, rowsPerPage]);
+
+  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+
+  return (
+    <div className="border rounded-lg overflow-hidden h-full flex flex-col">
+       <div className="flex-grow overflow-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            <tr>
+              {['Timestamp', 'Entity', 'Action', 'User'].map(header => (
+                <th key={header} className="p-2 text-left font-semibold">
+                  <Button variant="ghost" onClick={() => handleSort(header.toLowerCase().replace(' ', '_') as any)}>
+                    {header}
+                    <ArrowDown className="w-3 h-3 ml-2" />
+                  </Button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedData.map((event, index) => (
+              <tr key={index} className="border-b">
+                <td className="p-2">{format(new Date(event.created_timestamp), 'PPpp')}</td>
+                <td className="p-2">{event.entity_name}</td>
+                <td className="p-2">{event.action}</td>
+                <td className="p-2">{event.user?.name || 'N/A'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+       </div>
+        {totalPages > 1 && (
+            <div className="flex-shrink-0 flex items-center justify-between p-2 border-t">
+                <p className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                </p>
+                <div className="flex gap-2">
+                    <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                    >
+                        Previous
+                    </Button>
+                    <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                    </Button>
+                </div>
+            </div>
+        )}
+    </div>
+  )
+}
+
 export default function AuditTimeline() {
-  const [data, setData] = useState<ProcessedAuditEvent[]>([]);
+  const [auditData, setAuditData] = useState<ProcessedAuditEvent[]>([]);
+  const [genericData, setGenericData] = useState<{rows: GenericRow[], columns: any[]} | null>(null);
+  const [dataType, setDataType] = useState<'audit' | 'generic' | null>(null);
+  
   const [fileName, setFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'upload' | 'timeline'>('upload');
@@ -583,7 +697,6 @@ export default function AuditTimeline() {
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
 
   useEffect(() => {
-    // Show upload walkthrough on initial load
     const hasSeenUpload = localStorage.getItem('hasSeenUploadWalkthrough');
     if (!hasSeenUpload) {
         setShowUploadWalkthrough(true);
@@ -594,46 +707,22 @@ export default function AuditTimeline() {
   useEffect(() => {
     if (view === 'timeline') {
       const hasSeenTimeline = localStorage.getItem('hasSeenTimelineWalkthrough');
-      if (!hasSeenTimeline) {
+      if (!hasSeenTimeline && dataType === 'audit') {
         setShowTimelineWalkthrough(true);
         localStorage.setItem('hasSeenTimelineWalkthrough', 'true');
       }
     }
-  }, [view]);
+  }, [view, dataType]);
 
   const uploadWalkthroughSteps: Step[] = [
-    {
-      element: '#upload-card',
-      title: 'Upload Your Data',
-      content: 'Start by uploading a CSV file of your audit logs. You can drag and drop a file or click here to select one.',
-    },
+    { element: '#upload-card', title: 'Upload Your Data', content: 'Upload a CSV, XLSX, or JSON file. The app will dynamically adapt to its structure.' },
   ];
 
   const timelineWalkthroughSteps: Step[] = [
-    {
-      element: '#flow-chart-card',
-      title: 'Business Process Flow',
-      content: 'This chart shows the stages of your process. It highlights stages that are present in your data. Click a stage to filter the timeline below.',
-      placement: 'bottom',
-    },
-    {
-        element: '#search-bar',
-        title: 'Search Logs',
-        content: 'You can perform a deep search on all event details, including the raw JSON payloads.',
-        placement: 'bottom',
-    },
-    {
-        element: '#filter-controls',
-        title: 'Filter & Sort',
-        content: 'Refine the timeline by filtering on specific actions or entities, and sort the events by date or with our magic sort.',
-        placement: 'bottom',
-    },
-    {
-        element: '#timeline-event-card',
-        title: 'Timeline Events',
-        content: 'Each card represents an audit event. You can see a quick preview of the changes here. For full details, click the expand icon.',
-        placement: 'bottom',
-    },
+    { element: '#flow-chart-card', title: 'Business Process Flow', content: 'This chart shows the stages of your process. Click a stage to filter the timeline.', placement: 'bottom' },
+    { element: '#search-bar', title: 'Search Logs', content: 'Perform a deep search on all event details, including raw JSON payloads.', placement: 'bottom' },
+    { element: '#filter-controls', title: 'Filter & Sort', content: 'Refine the timeline by filtering on specific actions or entities and sorting by date.', placement: 'bottom' },
+    { element: '#timeline-event-card', title: 'Timeline Events', content: 'Each card represents an audit event. Click the expand icon for full details.', placement: 'bottom' },
   ]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -642,14 +731,74 @@ export default function AuditTimeline() {
     setFile(null);
     const targetFile = e.target.files?.[0];
     if (targetFile) {
-        if (targetFile.type !== 'text/csv') {
-            setError('Please upload a valid CSV file.');
+        const allowedTypes = ['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/json'];
+        if (!allowedTypes.includes(targetFile.type)) {
+            setError('Please upload a valid CSV, XLSX, or JSON file.');
         } else {
             setFile(targetFile);
             setFileName(targetFile.name);
         }
     }
   };
+
+  const parseFile = (file: File, onComplete: (results: any[]) => void, onError: (error: string) => void) => {
+    const reader = new FileReader();
+    
+    reader.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const progress = (event.loaded / event.total) * 100;
+        setUploadProgress(progress);
+      }
+    };
+
+    reader.onload = (event) => {
+      try {
+        const fileContent = event.target?.result;
+        if (!fileContent) {
+          onError('File content is empty.');
+          return;
+        }
+
+        if (file.type === 'application/json') {
+          const jsonData = JSON.parse(fileContent as string);
+          if (Array.isArray(jsonData)) {
+            onComplete(jsonData);
+          } else {
+            onError('JSON file must contain an array of objects.');
+          }
+        } else if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+          const workbook = XLSX.read(fileContent, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const data = XLSX.utils.sheet_to_json(sheet);
+          onComplete(data);
+        } else { // CSV
+          Papa.parse(fileContent as string, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              if (results.errors.length) {
+                onError('Failed to parse CSV: ' + results.errors[0].message);
+              } else {
+                onComplete(results.data);
+              }
+            },
+            error: (err: any) => onError('Failed to parse CSV file: ' + err.message),
+          });
+        }
+      } catch (e: any) {
+        onError('Failed to read file: ' + e.message);
+      }
+    };
+
+    reader.onerror = () => onError('Failed to read file.');
+    
+    if (file.type.includes('spreadsheetml')) {
+      reader.readAsBinaryString(file);
+    } else {
+      reader.readAsText(file);
+    }
+  }
 
   const handleViewTimeline = () => {
       if (!file) {
@@ -658,56 +807,52 @@ export default function AuditTimeline() {
       }
       setIsProcessingFile(true);
       setUploadProgress(0);
-      const results: any[] = [];
 
-      Papa.parse(file, {
-          header: true,
-          skipEmptyLines: true,
-          worker: true, // Use a web worker to avoid blocking the main thread
-          step: (step, parser) => {
-              // step.data contains one row
-              results.push(step.data);
-
-              // Update progress
-              if (file.size) {
-                const progress = (step.meta.cursor / file.size) * 100;
-                setUploadProgress(progress);
-              }
-          },
-          complete: () => {
-              setUploadProgress(100);
-
-              const validData = results.filter(row => row.created_timestamp && row.action);
-              if (validData.length === 0) {
-                  setError('CSV file is empty, invalid, or does not contain required "created_timestamp" and "action" columns.');
-                  setView('upload');
-              } else {
-                  const validatedData = z.array(SampleEventSchema).safeParse(validData);
-                  let processedData: ProcessedAuditEvent[] = [];
-                  if (validatedData.success) {
-                    processedData = processAuditData(validatedData.data);
-                    setData(processedData);
-                  } else {
-                    console.error(validatedData.error);
-                    setError('CSV data does not match the expected format.');
-                    processedData = processAuditData(validData as AuditEvent[]);
-                    setData(processedData); // Fallback to raw data for display
-                  }
-                  setView('timeline');
-              }
-              setTimeout(() => setIsProcessingFile(false), 500);
-          },
-          error: (err: any) => {
-              setError('Failed to parse CSV file: ' + err.message);
+      parseFile(file, (results) => {
+          setUploadProgress(100);
+          if (results.length === 0) {
+              setError('File is empty or could not be parsed.');
               setView('upload');
               setIsProcessingFile(false);
+              return;
           }
+          
+          const firstRow = results[0];
+          const headers = Object.keys(firstRow);
+          const isAuditLog = ['created_timestamp', 'action', 'entity_name'].every(h => headers.includes(h));
+
+          if (isAuditLog) {
+              const validatedData = z.array(SampleEventSchema).safeParse(results);
+              let processedData: ProcessedAuditEvent[] = [];
+              if (validatedData.success) {
+                processedData = processAuditData(validatedData.data);
+              } else {
+                // Fallback for partially compliant data
+                processedData = processAuditData(results as AuditEvent[]);
+              }
+              setAuditData(processedData);
+              setDataType('audit');
+          } else {
+              const columns = headers.map(header => ({ key: header, name: header, resizable: true }));
+              setGenericData({ rows: results, columns: columns });
+              setDataType('generic');
+          }
+
+          setView('timeline');
+          setTimeout(() => setIsProcessingFile(false), 500);
+
+      }, (errorMsg) => {
+          setError(errorMsg);
+          setView('upload');
+          setIsProcessingFile(false);
       });
   };
 
   const handleUploadNew = () => {
     setView('upload');
-    setData([]);
+    setAuditData([]);
+    setGenericData(null);
+    setDataType(null);
     setFileName(null);
     setFile(null);
     setError(null);
@@ -727,11 +872,7 @@ export default function AuditTimeline() {
 
     const handleAnalyze = async () => {
         if (filteredData.length === 0) {
-            toast({
-                variant: 'destructive',
-                title: 'No Data to Analyze',
-                description: 'There are no logs in the current view to analyze.',
-            });
+            toast({ variant: 'destructive', title: 'No Data to Analyze', description: 'There are no logs in the current view to analyze.' });
             return;
         }
 
@@ -740,10 +881,7 @@ export default function AuditTimeline() {
         setShowAnalysisDialog(true);
 
         try {
-            // Take the most recent 200 events for analysis to keep payload reasonable
             const dataForAnalysis = filteredData.slice(0, 200);
-
-            // Convert the sampled data to a simple string format for the prompt
             const logString = dataForAnalysis.map(e => JSON.stringify({
                 timestamp: e.created_timestamp,
                 action: e.action,
@@ -756,12 +894,7 @@ export default function AuditTimeline() {
             setAnalysisResult(result);
         } catch (e: any) {
             console.error(e);
-            toast({
-                variant: 'destructive',
-                title: 'Analysis Failed',
-                description: e.message || 'An unexpected error occurred while analyzing the logs.',
-            });
-            // Don't close the dialog on error, user might want to retry
+            toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred.' });
         } finally {
             setIsAnalyzing(false);
         }
@@ -769,33 +902,33 @@ export default function AuditTimeline() {
 
 
   const allEntities = useMemo(() => {
-    const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
+    const uniqueEntities = [...new Set(auditData.map(event => event.entity_name).filter(Boolean))];
     return uniqueEntities.sort();
-  }, [data]);
+  }, [auditData]);
 
   const allActions = useMemo(() => {
-    const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
+    const uniqueActions = [...new Set(auditData.map(event => event.action).filter(Boolean))];
     return uniqueActions.sort();
-  }, [data]);
+  }, [auditData]);
 
   useEffect(() => {
-    if (data.length > 0) {
+    if (auditData.length > 0) {
         setSelectedEntities(allEntities);
         setSelectedActions(allActions);
     }
-  }, [data, allEntities, allActions]);
+  }, [auditData, allEntities, allActions]);
 
   const filteredData = useMemo(() => {
-    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    if (dataType !== 'audit') return [];
 
-    let dataToFilter = data.filter(event => {
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+    let dataToFilter = auditData.filter(event => {
       if (!event.entity_name) return false;
       const entityName = event.entity_name.toLowerCase();
       let flowMatch = !selectedFlowEntities;
 
       if (selectedFlowEntities) {
           if (selectedFlowEntities.includes('trade')) {
-              // Special handling for the "trade" stage to exclude costs
               flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
           } else {
               flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
@@ -807,9 +940,7 @@ export default function AuditTimeline() {
 
       if (!flowMatch || !entityMatch || !actionMatch) return false;
 
-      if (!searchTerm) {
-        return true;
-      }
+      if (!searchTerm) return true;
       
       return event.searchable_text.includes(lowerCaseSearchTerm);
     });
@@ -821,22 +952,20 @@ export default function AuditTimeline() {
       return sortOrder === 'asc' ? dateA - dateB : dateB - a;
     });
 
-  }, [data, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities]);
+  }, [auditData, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType]);
 
 
   if (view === 'timeline') {
     return (
       <div className='flex flex-col h-screen w-full'>
-          <Walkthrough
+          {dataType === 'audit' && <Walkthrough
             steps={timelineWalkthroughSteps}
             isOpen={showTimelineWalkthrough}
             onClose={() => setShowTimelineWalkthrough(false)}
-          />
+          />}
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-3xl w-full h-auto max-h-[90vh]">
-                    <DialogHeader>
-                        <DialogTitle>AI-Generated Bug Report</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
                     <div className="overflow-y-auto">
                         {isAnalyzing && (
                             <div className="flex flex-col items-center justify-center gap-4 p-8">
@@ -855,77 +984,56 @@ export default function AuditTimeline() {
                     <circle cx="12" cy="12" r="3"/>
                   </svg>
                   <h1 className="text-2xl font-bold font-headline text-foreground">
-                    Audit Log Explorer
+                    {dataType === 'audit' ? 'Audit Log Explorer' : 'Data Explorer'}
                   </h1>
               </div>
                <div className="flex-shrink-0 flex items-center gap-2">
-                  <Button onClick={handleAnalyze} disabled={isAnalyzing}>
+                  {dataType === 'audit' && <Button onClick={handleAnalyze} disabled={isAnalyzing}>
                       {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
                       Analyze
-                  </Button>
+                  </Button>}
                   <ThemeToggle />
               </div>
           </header>
-            <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
-                 <FlowChart data={data} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
-            </div>
+            {dataType === 'audit' && <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
+                 <FlowChart data={auditData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+            </div>}
           
           <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
-                <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
-                    <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}>
-                        <List className="mr-2 h-4 w-4" />
-                        Timeline
-                    </Button>
-                    <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}>
-                        <TableIcon className="mr-2 h-4 w-4" />
-                        Table
-                    </Button>
-                </div>
-                <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                        placeholder="Search logs..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 w-full sm:w-64"
-                    />
-                </div>
-                <MultiSelectFilter 
-                    title="Action"
-                    pluralTitle="Actions"
-                    options={allActions}
-                    selectedValues={selectedActions}
-                    onSelectionChange={setSelectedActions}
-                    className="w-full sm:w-[180px]"
-                />
-                <MultiSelectFilter 
-                    title="Entity"
-                    pluralTitle="Entities"
-                    options={allEntities}
-                    selectedValues={selectedEntities}
-                    onSelectionChange={setSelectedEntities}
-                    className="w-full sm:w-[180px]"
-                />
-                <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
-                    {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
-                    Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
-                </Button>
-                <Button variant='outline' className="w-full sm:w-auto" disabled>
-                    <Wand2 className="mr-2 h-4 w-4" />
-                    Magic Sort
-                </Button>
+                {dataType === 'audit' && (
+                    <>
+                        <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
+                            <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
+                            <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
+                        </div>
+                        <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input placeholder="Search logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 w-full sm:w-64" />
+                        </div>
+                        <MultiSelectFilter title="Action" pluralTitle="Actions" options={allActions} selectedValues={selectedActions} onSelectionChange={setSelectedActions} className="w-full sm:w-[180px]" />
+                        <MultiSelectFilter title="Entity" pluralTitle="Entities" options={allEntities} selectedValues={selectedEntities} onSelectionChange={setSelectedEntities} className="w-full sm:w-[180px]" />
+                        <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
+                            {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
+                            Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
+                        </Button>
+                        <Button variant='outline' className="w-full sm:w-auto" disabled><Wand2 className="mr-2 h-4 w-4" />Magic Sort</Button>
+                    </>
+                )}
                 <div className="flex-grow"></div>
                 <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>
+
           <div className='flex-grow min-h-0 flex flex-col gap-4 px-4 md:px-8 pb-4'>
-            {activeView === 'timeline' ? (
+            {dataType === 'generic' && genericData && (
+                 <DataGrid columns={genericData.columns} rows={genericData.rows} />
+            )}
+            {dataType === 'audit' && activeView === 'timeline' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
                     {filteredData.map((event, index) => {
                         const { created_timestamp, entity_name, action } = event;
-                        if (!created_timestamp || !action) {
-                            return null;
-                        }
+                        if (!created_timestamp || !action) return null;
+                        
                         const eventDate = new Date(created_timestamp);
                         const icon = getIconForEvent(action);
 
@@ -958,15 +1066,9 @@ export default function AuditTimeline() {
                                     <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
                                 </div>
                                 <Dialog>
-                                    <DialogTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                            <Maximize className="h-4 w-4" />
-                                        </Button>
-                                    </DialogTrigger>
+                                    <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
                                     <DialogContent className="max-w-4xl w-full h-auto max-h-[80vh]">
-                                        <DialogHeader>
-                                            <DialogTitle>{action} on {entity_name}</DialogTitle>
-                                        </DialogHeader>
+                                        <DialogHeader><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
                                         {renderDetails(event)}
                                     </DialogContent>
                                 </Dialog>
@@ -977,10 +1079,8 @@ export default function AuditTimeline() {
                     })}
                     </VerticalTimeline>
                 </ScrollArea>
-            ) : (
-                <div className="border rounded-lg overflow-hidden h-full flex flex-col">
-                    <DataTable data={filteredData} />
-                </div>
+            ) : dataType === 'audit' && (
+                <SimpleTable data={filteredData} />
             )}
           </div>
       </div>
@@ -989,33 +1089,23 @@ export default function AuditTimeline() {
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-[80vh]">
-        <Walkthrough
-            steps={uploadWalkthroughSteps}
-            isOpen={showUploadWalkthrough}
-            onClose={() => setShowUploadWalkthrough(false)}
-        />
+        <Walkthrough steps={uploadWalkthroughSteps} isOpen={showUploadWalkthrough} onClose={() => setShowUploadWalkthrough(false)} />
         <div className="w-full max-w-lg text-right mb-4 flex justify-end items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => setShowUploadWalkthrough(true)}>
-                <HelpCircle className="w-5 h-5" />
-            </Button>
+            <Button variant="ghost" size="icon" onClick={() => setShowUploadWalkthrough(true)}><HelpCircle className="w-5 h-5" /></Button>
             <ThemeToggle />
         </div>
         <Card className="w-full max-w-lg text-center" id="upload-card">
-            <CardHeader>
-            <CardTitle className="text-2xl font-headline">Upload Audit Log</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-2xl font-headline">Upload Data File</CardTitle></CardHeader>
             <CardContent className="flex flex-col items-center gap-6 p-8">
                 <div className="flex flex-col items-center justify-center w-full">
-                    <label htmlFor="csv-upload" className="w-full">
+                    <label htmlFor="file-upload" className="w-full">
                         <div className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-card hover:bg-muted transition-colors">
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                 <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
-                                <p className="mb-2 text-sm text-muted-foreground">
-                                    <span className="font-semibold text-primary">Click to upload</span> or drag and drop
-                                </p>
-                                <p className="text-xs text-muted-foreground">CSV file</p>
+                                <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold text-primary">Click to upload</span> or drag and drop</p>
+                                <p className="text-xs text-muted-foreground">CSV, XLSX, or JSON</p>
                             </div>
-                            <input id="csv-upload" type="file" className="hidden" accept=".csv" onChange={handleFileChange} />
+                            <input id="file-upload" type="file" className="hidden" accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json" onChange={handleFileChange} />
                         </div>
                     </label>
 
@@ -1030,12 +1120,8 @@ export default function AuditTimeline() {
                     </div>
 
                     <Button onClick={handleViewTimeline} disabled={!file || !!error || isProcessingFile} className="w-full mt-4">
-                        {isProcessingFile ? (
-                            <Loader className="mr-2 animate-spin" />
-                        ) : (
-                            <Eye className="mr-2" />
-                        )}
-                        {isProcessingFile ? 'Processing...' : 'View Timeline'}
+                        {isProcessingFile ? <Loader className="mr-2 animate-spin" /> : <Eye className="mr-2" />}
+                        {isProcessingFile ? 'Processing...' : 'View Data'}
                     </Button>
                 </div>
                 
@@ -1045,5 +1131,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    

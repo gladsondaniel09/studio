@@ -1,19 +1,17 @@
 import { z } from 'zod';
 
+// This schema is preserved for backward compatibility with known audit log files.
 export const SampleEventSchema = z.object({
   created_timestamp: z.string().describe('An ISO 8601 timestamp for when the event occurred.'),
   entity_name: z.string().describe('The name of the entity that was affected, e.g., "Trade" or "User Account".'),
-  action: z.preprocess(
-    (val) => String(val).toLowerCase(),
-    z.enum(['create', 'update', 'delete'])
-  ).describe('The type of action that occurred.'),
-  payload: z.string().optional().describe("A JSON string representing the full data object for 'create' or 'delete' actions."),
-  difference_list: z.string().optional().describe("A JSON string of an array of differences for 'update' actions. Each difference should have 'label', 'oldValue', and 'newValue' fields."),
+  action: z.string().describe('The type of action that occurred (e.g., "create", "update").'),
+  payload: z.string().optional().nullable().describe("A JSON string representing the full data object for 'create' or 'delete' actions."),
+  difference_list: z.string().optional().nullable().describe("A JSON string of an array of differences for 'update' actions."),
   user: z.object({
     id: z.string().describe("The user's ID."),
     name: z.string().describe("The user's name."),
     email: z.string().describe("The user's email."),
-  }).optional().describe('The user who performed the action.'),
+  }).optional().nullable().describe('The user who performed the action.'),
 });
 
 export type AuditEvent = z.infer<typeof SampleEventSchema>;
