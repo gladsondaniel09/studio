@@ -41,8 +41,9 @@ const DataGrid: React.FC<DataGridProps> = ({ rows: initialRows, columns: initial
   const formattedColumns = useMemo(() => {
     return initialColumns.map(col => ({
         ...col,
+        width: 200, 
         formatter: ({ row }: { row: any }) => (
-            <div className="truncate">{formatValue(row[col.key])}</div>
+            <div className="whitespace-normal break-words py-1">{formatValue(row[col.key])}</div>
         ),
     }));
   }, [initialColumns]);
@@ -101,7 +102,7 @@ const DataGrid: React.FC<DataGridProps> = ({ rows: initialRows, columns: initial
             rows={filteredRows}
             className="h-full w-full"
             headerRowHeight={40}
-            rowHeight={40}
+            rowHeight={_ => 60}
         />
       </div>
     </div>
