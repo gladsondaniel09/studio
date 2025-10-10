@@ -10,7 +10,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -1052,6 +1052,57 @@ export default function AuditTimeline() {
   }, [auditData, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType]);
 
 
+   const handleExport = () => {
+    const dataToExport = [];
+    const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Difference', 'Difference List', 'Payload'];
+
+    filteredData.forEach(event => {
+        const isUpdate = event.action.toLowerCase().includes('update');
+        const diffs = (isUpdate && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
+            ? event.parsed_difference_list 
+            : [null];
+        
+        diffs.forEach((diff, index) => {
+            const row: {[key: string]: any} = {};
+            
+            if (index === 0) {
+                row['Timestamp'] = format(new Date(event.created_timestamp), 'PPpp');
+                row['Entity'] = event.entity_name;
+                row['Action'] = event.action;
+                row['User'] = event.user?.name || 'N/A';
+                row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
+                row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
+            } else {
+                headers.forEach(h => {
+                  if (h !== 'Difference') row[h] = '';
+                });
+            }
+
+            if (diff) {
+                const oldValue = String(diff.oldValue ?? 'none');
+                const newValue = String(diff.newValue ?? 'none');
+                row['Difference'] = `${diff.label || diff.field}: ${oldValue} -> ${newValue}`;
+            } else {
+                row['Difference'] = '';
+            }
+
+            dataToExport.push(row);
+        });
+    });
+
+    const csv = Papa.unparse(dataToExport);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.href) {
+        URL.revokeObjectURL(link.href);
+    }
+    link.href = URL.createObjectURL(blob);
+    link.download = `audit_export_${new Date().toISOString()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   if (view === 'timeline') {
     return (
       <div className='flex flex-col h-screen w-full'>
@@ -1117,6 +1168,12 @@ export default function AuditTimeline() {
                     </>
                 )}
                 <div className="flex-grow"></div>
+                 {dataType === 'audit' && activeView === 'table' && (
+                    <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
+                        <Download className="mr-2 h-4 w-4" />
+                        Download CSV
+                    </Button>
+                )}
                 <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>
 
@@ -1164,12 +1221,10 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                    <DialogContent className="max-w-4xl w-full p-0">
-                                         <DialogHeader className="p-6 pb-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                          <div className="max-h-[80vh] overflow-y-auto">
-                                            <ScrollArea className="h-full">
-                                                {renderDetails(event)}
-                                            </ScrollArea>
+                                    <DialogContent className="max-w-4xl w-full p-0 flex flex-col h-auto max-h-[80vh]">
+                                         <DialogHeader className="p-6 pb-0 flex-shrink-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
+                                          <div className="flex-grow overflow-y-auto">
+                                            {renderDetails(event)}
                                           </div>
                                     </DialogContent>
                                 </Dialog>
