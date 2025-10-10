@@ -627,8 +627,8 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   
-  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload'}[] = [
-    { label: '', key: 'created_timestamp'}, // For expand button
+  const headers: {label: string, key: string}[] = [
+    { label: '', key: 'expand'}, // For expand button
     { label: 'Timestamp', key: 'created_timestamp'},
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
@@ -676,7 +676,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
               {headers.map(header => (
                 <th key={header.key} className="p-2 text-left font-semibold whitespace-nowrap">
                   {header.label ? (
-                     <Button variant="ghost" onClick={() => handleSort(header.key)}>
+                     <Button variant="ghost" onClick={() => handleSort(header.key as any)}>
                         {header.label}
                         {sortColumn === header.key && (
                             sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
@@ -1166,8 +1166,8 @@ export default function AuditTimeline() {
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
                                     <DialogContent className="max-w-4xl w-full p-0">
                                          <DialogHeader className="p-6 pb-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                         <div className="max-h-[80vh] overflow-y-auto">
-                                            <ScrollArea>
+                                          <div className="max-h-[80vh] overflow-y-auto">
+                                            <ScrollArea className="h-full">
                                                 {renderDetails(event)}
                                             </ScrollArea>
                                           </div>
