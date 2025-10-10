@@ -564,13 +564,13 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
 };
 
 const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
-  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name' | 'difference'>('created_timestamp');
+  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'tradeId'>('created_timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
-  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload') => {
+  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload' | 'tradeId') => {
     if (sortColumn === column) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -593,6 +593,13 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
     setExpandedRows({});
   }, [data]);
 
+    const getTradeId = (event: ProcessedAuditEvent) => {
+        if (event.parsed_payload) {
+            return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
+        }
+        return null;
+    }
+
   const sortedData = useMemo(() => {
     return [...data].sort((a, b) => {
       let aValue: any;
@@ -604,6 +611,9 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
       } else if (sortColumn === 'difference') {
         aValue = a.parsed_difference_list?.[0]?.field || '';
         bValue = b.parsed_difference_list?.[0]?.field || '';
+      } else if (sortColumn === 'tradeId') {
+        aValue = getTradeId(a) || '';
+        bValue = getTradeId(b) || '';
       } else {
         aValue = a[sortColumn as keyof ProcessedAuditEvent];
         bValue = b[sortColumn as keyof ProcessedAuditEvent];
@@ -632,6 +642,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
     { label: 'Timestamp', key: 'created_timestamp'},
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
+    { label: 'Trade ID', key: 'tradeId'},
     { label: 'User', key: 'user.name'},
     { label: 'Difference', key: 'difference' },
     { label: 'Difference List', key: 'difference_list' },
@@ -694,6 +705,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                 const isUpdate = event.action.toLowerCase().includes('update');
                 const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
                 const rowSpan = diffs.length > 0 ? diffs.length : 1;
+                const tradeId = getTradeId(event);
 
               return (
                   <Fragment key={globalIndex}>
@@ -709,6 +721,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                             <td className="p-2 align-top whitespace-nowrap" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>{tradeId || <span className="text-muted-foreground">--</span>}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
                           </>
                         )}
@@ -1113,16 +1126,18 @@ export default function AuditTimeline() {
           />}
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-3xl">
-                     <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
-                    <div className="overflow-y-auto max-h-[80vh]">
-                        {isAnalyzing && (
-                            <div className="flex flex-col items-center justify-center gap-4 p-8">
-                                <Loader className="w-10 h-10 animate-spin text-primary" />
-                                <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
-                            </div>
-                        )}
-                        {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
-                    </div>
+                    <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
+                    <ScrollArea className="max-h-[80vh] -mx-6 px-6">
+                        <div className="py-4">
+                            {isAnalyzing && (
+                                <div className="flex flex-col items-center justify-center gap-4 p-8">
+                                    <Loader className="w-10 h-10 animate-spin text-primary" />
+                                    <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
+                                </div>
+                            )}
+                            {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
+                        </div>
+                    </ScrollArea>
                 </DialogContent>
             </Dialog>
           <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
@@ -1221,11 +1236,13 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                    <DialogContent className="max-w-4xl w-full p-0 flex flex-col h-auto max-h-[80vh]">
+                                     <DialogContent className="max-w-4xl w-full p-0 flex flex-col max-h-[80vh]">
                                          <DialogHeader className="p-6 pb-0 flex-shrink-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                          <div className="flex-grow overflow-y-auto">
-                                            {renderDetails(event)}
-                                          </div>
+                                          <ScrollArea className="flex-grow">
+                                            <div className="px-6 pb-6">
+                                                {renderDetails(event)}
+                                            </div>
+                                          </ScrollArea>
                                     </DialogContent>
                                 </Dialog>
                             </div>
