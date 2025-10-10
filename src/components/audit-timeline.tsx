@@ -10,7 +10,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -570,11 +570,11 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   const [rowsPerPage] = useState(50);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
-  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference') => {
+  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload') => {
     if (sortColumn === column) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
-      setSortColumn(column);
+      setSortColumn(column as any);
       setSortDirection('asc');
     }
     setCurrentPage(1);
@@ -627,21 +627,34 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   
-  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name' | 'difference'}[] = [
+  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload'}[] = [
+    { label: '', key: 'created_timestamp'}, // For expand button
     { label: 'Timestamp', key: 'created_timestamp'},
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
     { label: 'User', key: 'user.name'},
     { label: 'Difference', key: 'difference' },
+    { label: 'Difference List', key: 'difference_list' },
+    { label: 'Payload', key: 'payload' },
   ]
+
+  const TruncatedCell = ({ value }: { value: string | null | undefined }) => {
+    const text = value === 'NULL' ? '--' : String(value || '--');
+    const isTruncated = text.length > 50;
+    return (
+        <div className="max-w-[200px] truncate" title={text}>
+            {isTruncated ? text.substring(0, 50) + '...' : text}
+        </div>
+    )
+  }
 
   const renderDiff = (diff: any) => {
     const formatDiffValue = (value: any) => {
       let displayValue = String(value ?? 'none');
-      if (displayValue.length > 50) {
-        displayValue = displayValue.substring(0, 50) + '...';
+      if (displayValue.length > 30) {
+        displayValue = displayValue.substring(0, 30) + '...';
       }
-      return <span className='font-mono text-xs'>{`"${displayValue}"`}</span>
+      return <span className='font-mono text-xs' title={String(value ?? 'none')}>{`"${displayValue}"`}</span>
     };
 
     return (
@@ -661,30 +674,39 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
           <thead className="bg-muted/50 sticky top-0">
             <tr>
               {headers.map(header => (
-                <th key={header.key} className="p-2 text-left font-semibold">
-                  <Button variant="ghost" onClick={() => handleSort(header.key)}>
-                    {header.label}
-                    {sortColumn === header.key && (
-                         sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
-                    )}
-                  </Button>
+                <th key={header.key} className="p-2 text-left font-semibold whitespace-nowrap">
+                  {header.label ? (
+                     <Button variant="ghost" onClick={() => handleSort(header.key)}>
+                        {header.label}
+                        {sortColumn === header.key && (
+                            sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
+                        )}
+                    </Button>
+                  ) : <div className="w-8"></div>}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {paginatedData.map((event, index) => {
-              const isUpdate = event.action.toLowerCase().includes('update');
-              const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
-              const rowSpan = diffs.length > 0 ? diffs.length : 1;
+                const globalIndex = ((currentPage - 1) * rowsPerPage) + index;
+                const isExpanded = expandedRows[globalIndex];
+                const isUpdate = event.action.toLowerCase().includes('update');
+                const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
+                const rowSpan = diffs.length > 0 ? diffs.length : 1;
 
               return (
-                  <Fragment key={index}>
+                  <Fragment key={globalIndex}>
                     {diffs.map((diff, diffIndex) => (
-                      <tr key={`${index}-${diffIndex}`} className="border-b">
+                      <tr key={`${globalIndex}-${diffIndex}`} className="border-b">
                         {diffIndex === 0 && (
                           <>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>
+                                <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
+                                    {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                </Button>
+                            </td>
+                            <td className="p-2 align-top whitespace-nowrap" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
                             <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
@@ -693,8 +715,25 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
                          <td className="p-2 align-top">
                           {diff ? renderDiff(diff) : <span className="text-muted-foreground">--</span>}
                         </td>
+                         {diffIndex === 0 && (
+                             <>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>
+                                    <TruncatedCell value={event.difference_list} />
+                                </td>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>
+                                    <TruncatedCell value={event.payload} />
+                                </td>
+                            </>
+                         )}
                       </tr>
                     ))}
+                    {isExpanded && (
+                        <tr className="border-b bg-muted/50">
+                            <td colSpan={headers.length} className="p-0">
+                                {renderDetails(event)}
+                            </td>
+                        </tr>
+                    )}
                   </Fragment>
               )
             })}
@@ -1126,8 +1165,8 @@ export default function AuditTimeline() {
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
                                     <DialogContent className="max-w-4xl w-full p-0">
+                                         <DialogHeader className="p-6 pb-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
                                          <div className="max-h-[80vh] overflow-y-auto">
-                                            <DialogHeader className="p-6 pb-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
                                             <ScrollArea>
                                                 {renderDetails(event)}
                                             </ScrollArea>
