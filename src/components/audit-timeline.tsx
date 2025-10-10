@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
@@ -562,23 +563,14 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
-const TruncatedCell = ({ value }: { value: any }) => {
-    const text = String(value ?? 'NULL');
-    return (
-        <div className="max-w-[200px] truncate" title={text}>
-            {text}
-        </div>
-    );
-};
-
 const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
-  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name'>('created_timestamp');
+  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name' | 'difference'>('created_timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
-  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name') => {
+  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference') => {
     if (sortColumn === column) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -609,6 +601,9 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
       if (sortColumn === 'user.name') {
         aValue = a.user?.name || '';
         bValue = b.user?.name || '';
+      } else if (sortColumn === 'difference') {
+        aValue = a.parsed_difference_list?.[0]?.field || '';
+        bValue = b.parsed_difference_list?.[0]?.field || '';
       } else {
         aValue = a[sortColumn as keyof ProcessedAuditEvent];
         bValue = b[sortColumn as keyof ProcessedAuditEvent];
@@ -632,14 +627,32 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
   
-  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name'}[] = [
+  const headers: {label: string, key: keyof ProcessedAuditEvent | 'user.name' | 'difference'}[] = [
     { label: 'Timestamp', key: 'created_timestamp'},
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
     { label: 'User', key: 'user.name'},
-    { label: 'Difference List', key: 'difference_list' },
-    { label: 'Payload', key: 'payload' },
+    { label: 'Difference', key: 'difference' },
   ]
+
+  const renderDiff = (diff: any) => {
+    const formatDiffValue = (value: any) => {
+      let displayValue = String(value ?? 'none');
+      if (displayValue.length > 50) {
+        displayValue = displayValue.substring(0, 50) + '...';
+      }
+      return <span className='font-mono text-xs'>{`"${displayValue}"`}</span>
+    };
+
+    return (
+      <div className='py-1'>
+        <span className="font-semibold capitalize">{(diff.label || diff.field || '').replace(/_/g, ' ')}:</span>
+        <span className="text-muted-foreground line-through ml-2">{formatDiffValue(diff.oldValue)}</span>
+        <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
+        <span className='text-foreground'>{formatDiffValue(diff.newValue)}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="border rounded-lg overflow-hidden h-full flex flex-col">
@@ -647,7 +660,6 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0">
             <tr>
-              <th className="p-2 text-left font-semibold w-12"></th>
               {headers.map(header => (
                 <th key={header.key} className="p-2 text-left font-semibold">
                   <Button variant="ghost" onClick={() => handleSort(header.key)}>
@@ -662,29 +674,27 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
           </thead>
           <tbody>
             {paginatedData.map((event, index) => {
-              const isExpanded = expandedRows[index];
+              const isUpdate = event.action.toLowerCase().includes('update');
+              const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
+              const rowSpan = diffs.length > 0 ? diffs.length : 1;
+
               return (
                   <Fragment key={index}>
-                      <tr className="border-b" >
-                        <td className="p-2">
-                           <Button variant="ghost" size="icon" onClick={() => toggleRow(index)} className="h-8 w-8">
-                                <ChevronRightIcon className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-90")} />
-                            </Button>
+                    {diffs.map((diff, diffIndex) => (
+                      <tr key={`${index}-${diffIndex}`} className="border-b">
+                        {diffIndex === 0 && (
+                          <>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
+                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
+                          </>
+                        )}
+                         <td className="p-2 align-top">
+                          {diff ? renderDiff(diff) : <span className="text-muted-foreground">--</span>}
                         </td>
-                        <td className="p-2">{format(new Date(event.created_timestamp), 'PPpp')}</td>
-                        <td className="p-2">{event.entity_name}</td>
-                        <td className="p-2">{event.action}</td>
-                        <td className="p-2">{event.user?.name || 'N/A'}</td>
-                        <td className="p-2 font-mono text-xs"><TruncatedCell value={event.difference_list} /></td>
-                        <td className="p-2 font-mono text-xs"><TruncatedCell value={event.payload} /></td>
                       </tr>
-                      {isExpanded && (
-                          <tr className="bg-muted/50">
-                              <td colSpan={headers.length + 1}>
-                                  {renderDetails(event)}
-                              </td>
-                          </tr>
-                      )}
+                    ))}
                   </Fragment>
               )
             })}
@@ -1012,9 +1022,9 @@ export default function AuditTimeline() {
             onClose={() => setShowTimelineWalkthrough(false)}
           />}
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
-                <DialogContent className="max-w-3xl w-full h-auto max-h-[90vh]">
-                    <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
-                    <div className="overflow-y-auto">
+                <DialogContent className="max-w-3xl">
+                     <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
+                    <div className="overflow-y-auto max-h-[80vh]">
                         {isAnalyzing && (
                             <div className="flex flex-col items-center justify-center gap-4 p-8">
                                 <Loader className="w-10 h-10 animate-spin text-primary" />
@@ -1116,12 +1126,12 @@ export default function AuditTimeline() {
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
                                     <DialogContent className="max-w-4xl w-full p-0">
-                                        <ScrollArea className="max-h-[80vh]">
-                                          <div className='p-6'>
-                                            <DialogHeader><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                            {renderDetails(event)}
+                                         <div className="max-h-[80vh] overflow-y-auto">
+                                            <DialogHeader className="p-6 pb-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
+                                            <ScrollArea>
+                                                {renderDetails(event)}
+                                            </ScrollArea>
                                           </div>
-                                        </ScrollArea>
                                     </DialogContent>
                                 </Dialog>
                             </div>
