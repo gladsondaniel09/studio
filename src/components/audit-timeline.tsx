@@ -10,7 +10,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, CheckCircle, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -42,7 +42,6 @@ import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
 import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/lib/types';
-import DataGrid from './data-grid';
 import { format } from 'date-fns';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 import { cn } from '@/lib/utils';
@@ -214,6 +213,16 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
 
 export const renderDetails = (event: ProcessedAuditEvent) => {
     const { action, payload, difference_list, parsed_payload, parsed_difference_list } = event;
+
+    // Handle generic data
+    if (!action) {
+        return (
+             <div className="p-4">
+                <RawJsonViewer jsonString={JSON.stringify(event, null, 2)} title="Row Details" />
+             </div>
+        )
+    }
+
     const lowerCaseAction = action.toLowerCase();
     
     let formattedView = null;
@@ -471,32 +480,31 @@ const getObjectValues = (obj: any): string => {
 
 
 // Function to pre-process the raw data from the CSV
-const processAuditData = (events: AuditEvent[]): ProcessedAuditEvent[] => {
+const processAuditData = (events: any[]): any[] => {
   return events.map(event => {
     let parsed_payload: any = null;
     let parsed_difference_list: any = null;
+    let searchable_text: string = '';
 
-    try {
-      if (event.payload && event.payload !== 'NULL') {
-        parsed_payload = JSON.parse(event.payload);
-      }
-    } catch (e) {
-      // Ignore parsing errors, leave as null
+    // Create searchable text for any object
+    searchable_text = getObjectValues(event).toLowerCase();
+
+    if (event.payload && event.payload !== 'NULL') {
+        try {
+            parsed_payload = JSON.parse(event.payload);
+            searchable_text += ' ' + getObjectValues(parsed_payload).toLowerCase();
+        } catch (e) {
+            // Ignore if not valid JSON
+        }
     }
-
-    try {
-      if (event.difference_list && event.difference_list !== 'NULL') {
-        parsed_difference_list = JSON.parse(event.difference_list);
-      }
-    } catch (e) {
-      // Ignore parsing errors, leave as null
+    if (event.difference_list && event.difference_list !== 'NULL') {
+        try {
+            parsed_difference_list = JSON.parse(event.difference_list);
+            searchable_text += ' ' + getObjectValues(parsed_difference_list).toLowerCase();
+        } catch (e) {
+             // Ignore if not valid JSON
+        }
     }
-
-    // Create a single string for fast searching
-    const eventValues = Object.values(event).join(' ');
-    const payloadValues = getObjectValues(parsed_payload);
-    const diffValues = getObjectValues(parsed_difference_list);
-    const searchable_text = (eventValues + ' ' + payloadValues + ' ' + diffValues).toLowerCase();
 
     return {
       ...event,
@@ -563,18 +571,18 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
-const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
-  const [sortColumn, setSortColumn] = useState<keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'tradeId'>('created_timestamp');
+const SimpleTable = ({ data, columns: propColumns, dataType }: { data: any[], columns: {key: string, name: string}[], dataType: 'audit' | 'generic' }) => {
+  const [sortColumn, setSortColumn] = useState<string>(dataType === 'audit' ? 'created_timestamp' : propColumns[0]?.key);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(50);
   const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
 
-  const handleSort = (column: keyof ProcessedAuditEvent | 'user.name' | 'difference' | 'difference_list' | 'payload' | 'tradeId') => {
-    if (sortColumn === column) {
+  const handleSort = (columnKey: string) => {
+    if (sortColumn === columnKey) {
       setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
-      setSortColumn(column as any);
+      setSortColumn(columnKey);
       setSortDirection('asc');
     }
     setCurrentPage(1);
@@ -591,35 +599,34 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   useEffect(() => {
     setCurrentPage(1);
     setExpandedRows({});
-  }, [data]);
+    setSortColumn(dataType === 'audit' ? 'created_timestamp' : propColumns[0]?.key);
+    setSortDirection('desc');
+  }, [data, dataType, propColumns]);
 
-    const getTradeId = (event: ProcessedAuditEvent) => {
-        if (event.parsed_payload) {
-            return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
-        }
-        return null;
-    }
+  const getTradeId = (event: ProcessedAuditEvent) => {
+      if (event.parsed_payload) {
+          return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
+      }
+      return null;
+  }
 
   const sortedData = useMemo(() => {
     return [...data].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
+      let aValue = a[sortColumn];
+      let bValue = b[sortColumn];
 
-      if (sortColumn === 'user.name') {
+      if (dataType === 'audit' && sortColumn === 'user.name') {
         aValue = a.user?.name || '';
         bValue = b.user?.name || '';
-      } else if (sortColumn === 'difference') {
+      } else if (dataType === 'audit' && sortColumn === 'difference') {
         aValue = a.parsed_difference_list?.[0]?.field || '';
         bValue = b.parsed_difference_list?.[0]?.field || '';
-      } else if (sortColumn === 'tradeId') {
+      } else if (dataType === 'audit' && sortColumn === 'tradeId') {
         aValue = getTradeId(a) || '';
         bValue = getTradeId(b) || '';
-      } else {
-        aValue = a[sortColumn as keyof ProcessedAuditEvent];
-        bValue = b[sortColumn as keyof ProcessedAuditEvent];
       }
       
-      if (sortColumn === 'created_timestamp') {
+      if (dataType === 'audit' && sortColumn === 'created_timestamp') {
         aValue = new Date(aValue).getTime();
         bValue = new Date(bValue).getTime();
       }
@@ -628,7 +635,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [data, sortColumn, sortDirection]);
+  }, [data, sortColumn, sortDirection, dataType]);
 
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
@@ -636,9 +643,31 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
   }, [sortedData, currentPage, rowsPerPage]);
 
   const totalPages = Math.ceil(sortedData.length / rowsPerPage);
+
+  const isDate = (s: any) => {
+      if (s === null || s === undefined || typeof s !== 'string') return false;
+      const isIsoDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s);
+      if (isIsoDate) return true;
+      const date = new Date(s);
+      return !isNaN(date.getTime()) && s.length > 5;
+  };
   
-  const headers: {label: string, key: string}[] = [
-    { label: '', key: 'expand'}, // For expand button
+  const formatValue = (value: any) => {
+      if (isDate(value)) {
+          try {
+              return format(new Date(value), 'PPpp');
+          } catch {
+              return String(value);
+          }
+      }
+      if (typeof value === 'object' && value !== null) {
+          return JSON.stringify(value);
+      }
+      return String(value ?? '--');
+  };
+
+  const auditHeaders: {label: string, key: string}[] = [
+    { label: '', key: 'expand'},
     { label: 'Timestamp', key: 'created_timestamp'},
     { label: 'Entity', key: 'entity_name'},
     { label: 'Action', key: 'action'},
@@ -647,7 +676,14 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
     { label: 'Difference', key: 'difference' },
     { label: 'Difference List', key: 'difference_list' },
     { label: 'Payload', key: 'payload' },
-  ]
+  ];
+
+  const genericHeaders: {label: string, key: string}[] = [
+      { label: '', key: 'expand'},
+      ...propColumns.map(c => ({ label: c.name, key: c.key }))
+  ];
+
+  const headers = dataType === 'audit' ? auditHeaders : genericHeaders;
 
   const TruncatedCell = ({ value }: { value: string | null | undefined }) => {
     const text = value === 'NULL' ? '--' : String(value || '--');
@@ -687,7 +723,7 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
               {headers.map(header => (
                 <th key={header.key} className="p-2 text-left font-semibold whitespace-nowrap">
                   {header.label ? (
-                     <Button variant="ghost" onClick={() => handleSort(header.key as any)}>
+                     <Button variant="ghost" onClick={() => handleSort(header.key)}>
                         {header.label}
                         {sortColumn === header.key && (
                             sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
@@ -702,53 +738,79 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
             {paginatedData.map((event, index) => {
                 const globalIndex = ((currentPage - 1) * rowsPerPage) + index;
                 const isExpanded = expandedRows[globalIndex];
-                const isUpdate = event.action.toLowerCase().includes('update');
-                const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
-                const rowSpan = diffs.length > 0 ? diffs.length : 1;
-                const tradeId = getTradeId(event);
-
-              return (
-                  <Fragment key={globalIndex}>
-                    {diffs.map((diff, diffIndex) => (
-                      <tr key={`${globalIndex}-${diffIndex}`} className="border-b">
-                        {diffIndex === 0 && (
-                          <>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>
-                                <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
-                                    {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                </Button>
+                
+                if (dataType === 'audit') {
+                    const isUpdate = event.action.toLowerCase().includes('update');
+                    const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
+                    const rowSpan = diffs.length > 0 ? diffs.length : 1;
+                    const tradeId = getTradeId(event);
+                    return (
+                      <Fragment key={globalIndex}>
+                        {diffs.map((diff, diffIndex) => (
+                          <tr key={`${globalIndex}-${diffIndex}`} className="border-b">
+                            {diffIndex === 0 && (
+                              <>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>
+                                    <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
+                                        {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                    </Button>
+                                </td>
+                                <td className="p-2 align-top whitespace-nowrap" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>{tradeId || <span className="text-muted-foreground">--</span>}</td>
+                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
+                              </>
+                            )}
+                             <td className="p-2 align-top">
+                              {diff ? renderDiff(diff) : <span className="text-muted-foreground">--</span>}
                             </td>
-                            <td className="p-2 align-top whitespace-nowrap" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>{tradeId || <span className="text-muted-foreground">--</span>}</td>
-                            <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
-                          </>
+                             {diffIndex === 0 && (
+                                 <>
+                                    <td className="p-2 align-top" rowSpan={rowSpan}>
+                                        <TruncatedCell value={event.difference_list} />
+                                    </td>
+                                    <td className="p-2 align-top" rowSpan={rowSpan}>
+                                        <TruncatedCell value={event.payload} />
+                                    </td>
+                                </>
+                             )}
+                          </tr>
+                        ))}
+                        {isExpanded && (
+                            <tr className="border-b bg-muted/50">
+                                <td colSpan={headers.length} className="p-0">
+                                    {renderDetails(event)}
+                                </td>
+                            </tr>
                         )}
-                         <td className="p-2 align-top">
-                          {diff ? renderDiff(diff) : <span className="text-muted-foreground">--</span>}
-                        </td>
-                         {diffIndex === 0 && (
-                             <>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>
-                                    <TruncatedCell value={event.difference_list} />
+                      </Fragment>
+                    )
+                } else { // Generic data
+                    return (
+                        <Fragment key={globalIndex}>
+                            <tr className="border-b">
+                                <td className="p-2">
+                                    <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
+                                        {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                                    </Button>
                                 </td>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>
-                                    <TruncatedCell value={event.payload} />
-                                </td>
-                            </>
-                         )}
-                      </tr>
-                    ))}
-                    {isExpanded && (
-                        <tr className="border-b bg-muted/50">
-                            <td colSpan={headers.length} className="p-0">
-                                {renderDetails(event)}
-                            </td>
-                        </tr>
-                    )}
-                  </Fragment>
-              )
+                                {propColumns.map(col => (
+                                    <td key={col.key} className="p-2 align-top max-w-[250px] truncate" title={formatValue(event[col.key])}>
+                                        {formatValue(event[col.key])}
+                                    </td>
+                                ))}
+                            </tr>
+                            {isExpanded && (
+                                <tr className="border-b bg-muted/50">
+                                    <td colSpan={headers.length} className="p-0">
+                                        {renderDetails(event)}
+                                    </td>
+                                </tr>
+                            )}
+                        </Fragment>
+                    )
+                }
             })}
           </tbody>
         </table>
@@ -783,8 +845,8 @@ const SimpleTable = ({ data }: { data: ProcessedAuditEvent[] }) => {
 }
 
 export default function AuditTimeline() {
-  const [auditData, setAuditData] = useState<ProcessedAuditEvent[]>([]);
-  const [genericData, setGenericData] = useState<{rows: GenericRow[], columns: any[]} | null>(null);
+  const [data, setData] = useState<any[]>([]);
+  const [columns, setColumns] = useState<{key: string, name: string}[]>([]);
   const [dataType, setDataType] = useState<'audit' | 'generic' | null>(null);
   
   const [fileName, setFileName] = useState<string | null>(null);
@@ -930,22 +992,18 @@ export default function AuditTimeline() {
           const firstRow = results[0];
           const headers = Object.keys(firstRow);
           const isAuditLog = ['created_timestamp', 'action', 'entity_name'].every(h => headers.includes(h));
+          
+          const processedData = processAuditData(results);
+          setData(processedData);
 
           if (isAuditLog) {
-              const validatedData = z.array(SampleEventSchema).safeParse(results);
-              let processedData: ProcessedAuditEvent[] = [];
-              if (validatedData.success) {
-                processedData = processAuditData(validatedData.data);
-              } else {
-                // Fallback for partially compliant data
-                processedData = processAuditData(results as AuditEvent[]);
-              }
-              setAuditData(processedData);
               setDataType('audit');
+              setActiveView('timeline');
           } else {
-              const columns = headers.map(header => ({ key: header, name: header, resizable: true }));
-              setGenericData({ rows: results, columns: columns });
+              const fileColumns = headers.map(header => ({ key: header, name: header, resizable: true }));
+              setColumns(fileColumns);
               setDataType('generic');
+              setActiveView('table');
           }
 
           setView('timeline');
@@ -960,8 +1018,8 @@ export default function AuditTimeline() {
 
   const handleUploadNew = () => {
     setView('upload');
-    setAuditData([]);
-    setGenericData(null);
+    setData([]);
+    setColumns([]);
     setDataType(null);
     setFileName(null);
     setFile(null);
@@ -1012,96 +1070,117 @@ export default function AuditTimeline() {
 
 
   const allEntities = useMemo(() => {
-    const uniqueEntities = [...new Set(auditData.map(event => event.entity_name).filter(Boolean))];
+    if (dataType !== 'audit') return [];
+    const uniqueEntities = [...new Set(data.map(event => event.entity_name).filter(Boolean))];
     return uniqueEntities.sort();
-  }, [auditData]);
+  }, [data, dataType]);
 
   const allActions = useMemo(() => {
-    const uniqueActions = [...new Set(auditData.map(event => event.action).filter(Boolean))];
+    if (dataType !== 'audit') return [];
+    const uniqueActions = [...new Set(data.map(event => event.action).filter(Boolean))];
     return uniqueActions.sort();
-  }, [auditData]);
+  }, [data, dataType]);
 
   useEffect(() => {
-    if (auditData.length > 0) {
+    if (dataType === 'audit' && data.length > 0) {
         setSelectedEntities(allEntities);
         setSelectedActions(allActions);
     }
-  }, [auditData, allEntities, allActions]);
+  }, [data, dataType, allEntities, allActions]);
 
   const filteredData = useMemo(() => {
-    if (dataType !== 'audit') return [];
-
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
-    let dataToFilter = auditData.filter(event => {
-      if (!event.entity_name) return false;
-      const entityName = event.entity_name.toLowerCase();
-      let flowMatch = !selectedFlowEntities;
 
-      if (selectedFlowEntities) {
-          if (selectedFlowEntities.includes('trade')) {
-              flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
-          } else {
-              flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
+    let dataToFilter = data.filter(event => {
+      if (dataType === 'audit') {
+          if (!event.entity_name) return false;
+          const entityName = event.entity_name.toLowerCase();
+          let flowMatch = !selectedFlowEntities;
+
+          if (selectedFlowEntities) {
+              if (selectedFlowEntities.includes('trade')) {
+                  flowMatch = selectedFlowEntities.some(e => entityName.includes(e) && !entityName.includes('cost'));
+              } else {
+                  flowMatch = selectedFlowEntities.some(e => entityName.includes(e));
+              }
           }
+
+          const entityMatch = selectedEntities.length === 0 || selectedEntities.includes(event.entity_name);
+          const actionMatch = selectedActions.length === 0 || selectedActions.includes(event.action);
+
+          if (!flowMatch || !entityMatch || !actionMatch) return false;
       }
-
-      const entityMatch = selectedEntities.length === 0 || selectedEntities.includes(event.entity_name);
-      const actionMatch = selectedActions.length === 0 || selectedActions.includes(event.action);
-
-      if (!flowMatch || !entityMatch || !actionMatch) return false;
-
+      
       if (!searchTerm) return true;
       
       return event.searchable_text.includes(lowerCaseSearchTerm);
     });
 
-    return [...dataToFilter].sort((a, b) => {
-      const dateA = new Date(a.created_timestamp).getTime();
-      const dateB = new Date(b.created_timestamp).getTime();
-      if (isNaN(dateA) || isNaN(dateB)) return 0;
-      return sortOrder === 'asc' ? dateA - dateB : dateB - a;
-    });
+    if (dataType === 'audit') {
+        return [...dataToFilter].sort((a, b) => {
+            const dateA = new Date(a.created_timestamp).getTime();
+            const dateB = new Date(b.created_timestamp).getTime();
+            if (isNaN(dateA) || isNaN(dateB)) return 0;
+            return sortOrder === 'asc' ? dateA - dateB : dateB - a;
+        });
+    }
+    return dataToFilter;
 
-  }, [auditData, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType]);
+  }, [data, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType]);
 
 
    const handleExport = () => {
+    if (filteredData.length === 0) {
+        toast({ title: "No data to export.", variant: "destructive" });
+        return;
+    }
+
     const dataToExport = [];
-    const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Difference', 'Difference List', 'Payload'];
-
-    filteredData.forEach(event => {
-        const isUpdate = event.action.toLowerCase().includes('update');
-        const diffs = (isUpdate && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
-            ? event.parsed_difference_list 
-            : [null];
-        
-        diffs.forEach((diff, index) => {
-            const row: {[key: string]: any} = {};
+    
+    if (dataType === 'audit') {
+        const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Difference', 'Difference List', 'Payload'];
+        filteredData.forEach(event => {
+            const isUpdate = event.action.toLowerCase().includes('update');
+            const diffs = (isUpdate && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
+                ? event.parsed_difference_list 
+                : [null];
             
-            if (index === 0) {
-                row['Timestamp'] = format(new Date(event.created_timestamp), 'PPpp');
-                row['Entity'] = event.entity_name;
-                row['Action'] = event.action;
-                row['User'] = event.user?.name || 'N/A';
-                row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
-                row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
-            } else {
-                headers.forEach(h => {
-                  if (h !== 'Difference') row[h] = '';
-                });
-            }
+            diffs.forEach((diff, index) => {
+                const row: {[key: string]: any} = {};
+                
+                if (index === 0) {
+                    row['Timestamp'] = format(new Date(event.created_timestamp), 'PPpp');
+                    row['Entity'] = event.entity_name;
+                    row['Action'] = event.action;
+                    row['User'] = event.user?.name || 'N/A';
+                    row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
+                    row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
+                } else {
+                    headers.forEach(h => {
+                      if (h !== 'Difference') row[h] = '';
+                    });
+                }
 
-            if (diff) {
-                const oldValue = String(diff.oldValue ?? 'none');
-                const newValue = String(diff.newValue ?? 'none');
-                row['Difference'] = `${diff.label || diff.field}: ${oldValue} -> ${newValue}`;
-            } else {
-                row['Difference'] = '';
-            }
+                if (diff) {
+                    const oldValue = String(diff.oldValue ?? 'none');
+                    const newValue = String(diff.newValue ?? 'none');
+                    row['Difference'] = `${diff.label || diff.field}: ${oldValue} -> ${newValue}`;
+                } else {
+                    row['Difference'] = '';
+                }
 
-            dataToExport.push(row);
+                dataToExport.push(row);
+            });
         });
-    });
+    } else { // Generic Data
+        filteredData.forEach(row => {
+            const newRow: {[key: string]: any} = {};
+            columns.forEach(col => {
+                newRow[col.name] = row[col.key];
+            });
+            dataToExport.push(newRow);
+        });
+    }
 
     const csv = Papa.unparse(dataToExport);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -1110,7 +1189,7 @@ export default function AuditTimeline() {
         URL.revokeObjectURL(link.href);
     }
     link.href = URL.createObjectURL(blob);
-    link.download = `audit_export_${new Date().toISOString()}.csv`;
+    link.download = `export_${new Date().toISOString()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1127,17 +1206,19 @@ export default function AuditTimeline() {
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-3xl">
                     <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
-                    <ScrollArea className="max-h-[80vh] -mx-6 px-6">
-                        <div className="py-4">
-                            {isAnalyzing && (
-                                <div className="flex flex-col items-center justify-center gap-4 p-8">
-                                    <Loader className="w-10 h-10 animate-spin text-primary" />
-                                    <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
-                                </div>
-                            )}
-                            {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
-                        </div>
-                    </ScrollArea>
+                    <div className="relative h-auto max-h-[80vh]">
+                        <ScrollArea className="h-full w-full">
+                            <div className="py-4">
+                                {isAnalyzing && (
+                                    <div className="flex flex-col items-center justify-center gap-4 p-8">
+                                        <Loader className="w-10 h-10 animate-spin text-primary" />
+                                        <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
+                                    </div>
+                                )}
+                                {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
+                            </div>
+                        </ScrollArea>
+                    </div>
                 </DialogContent>
             </Dialog>
           <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
@@ -1159,20 +1240,22 @@ export default function AuditTimeline() {
               </div>
           </header>
             {dataType === 'audit' && <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
-                 <FlowChart data={auditData} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
+                 <FlowChart data={data} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
             </div>}
           
           <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
                 {dataType === 'audit' && (
+                    <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
+                        <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
+                        <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
+                    </div>
+                )}
+                <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input placeholder="Search logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 w-full sm:w-64" />
+                </div>
+                {dataType === 'audit' && (
                     <>
-                        <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
-                            <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
-                            <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
-                        </div>
-                        <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="Search logs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10 w-full sm:w-64" />
-                        </div>
                         <MultiSelectFilter title="Action" pluralTitle="Actions" options={allActions} selectedValues={selectedActions} onSelectionChange={setSelectedActions} className="w-full sm:w-[180px]" />
                         <MultiSelectFilter title="Entity" pluralTitle="Entities" options={allEntities} selectedValues={selectedEntities} onSelectionChange={setSelectedEntities} className="w-full sm:w-[180px]" />
                         <Button variant="outline" onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} className="w-full sm:w-auto">
@@ -1183,20 +1266,15 @@ export default function AuditTimeline() {
                     </>
                 )}
                 <div className="flex-grow"></div>
-                 {dataType === 'audit' && activeView === 'table' && (
-                    <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
-                        <Download className="mr-2 h-4 w-4" />
-                        Download CSV
-                    </Button>
-                )}
+                <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download CSV
+                </Button>
                 <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>
 
           <div className='flex-grow min-h-0 flex flex-col gap-4 px-4 md:px-8 pb-4'>
-            {dataType === 'generic' && genericData && (
-                 <DataGrid columns={genericData.columns} rows={genericData.rows} />
-            )}
-            {dataType === 'audit' && activeView === 'timeline' ? (
+            {activeView === 'timeline' && dataType === 'audit' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
                     {filteredData.map((event, index) => {
@@ -1236,13 +1314,15 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                     <DialogContent className="max-w-4xl w-full p-0 flex flex-col max-h-[80vh]">
+                                     <DialogContent className="max-w-4xl w-full flex flex-col">
                                          <DialogHeader className="p-6 pb-0 flex-shrink-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                          <ScrollArea className="flex-grow">
-                                            <div className="px-6 pb-6">
-                                                {renderDetails(event)}
-                                            </div>
-                                          </ScrollArea>
+                                          <div className="relative h-auto max-h-[80vh] flex-grow">
+                                            <ScrollArea className="h-full w-full">
+                                                <div className="px-6 pb-6">
+                                                    {renderDetails(event)}
+                                                </div>
+                                            </ScrollArea>
+                                          </div>
                                     </DialogContent>
                                 </Dialog>
                             </div>
@@ -1252,8 +1332,8 @@ export default function AuditTimeline() {
                     })}
                     </VerticalTimeline>
                 </ScrollArea>
-            ) : dataType === 'audit' && (
-                <SimpleTable data={filteredData} />
+            ) : (
+                <SimpleTable data={filteredData} columns={columns} dataType={dataType!} />
             )}
           </div>
       </div>
@@ -1304,5 +1384,3 @@ export default function AuditTimeline() {
     </div>
   );
 }
-
-    
