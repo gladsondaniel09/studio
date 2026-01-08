@@ -45,6 +45,7 @@ import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/li
 import { format } from 'date-fns';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 import { cn } from '@/lib/utils';
+import DataGrid from './data-grid';
 
 
 // Extend the AuditEvent type to include our pre-processed fields
@@ -571,278 +572,6 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
-const SimpleTable = ({ data, columns: propColumns, dataType }: { data: any[], columns: {key: string, name: string}[], dataType: 'audit' | 'generic' }) => {
-  const [sortColumn, setSortColumn] = useState<string>(dataType === 'audit' ? 'created_timestamp' : propColumns[0]?.key);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage] = useState(50);
-  const [expandedRows, setExpandedRows] = useState<{ [key: number]: boolean }>({});
-
-  const handleSort = (columnKey: string) => {
-    if (sortColumn === columnKey) {
-      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortColumn(columnKey);
-      setSortDirection('asc');
-    }
-    setCurrentPage(1);
-    setExpandedRows({});
-  };
-
-  const toggleRow = (index: number) => {
-    setExpandedRows(prev => ({
-        ...prev,
-        [index]: !prev[index]
-    }));
-  };
-  
-  useEffect(() => {
-    setCurrentPage(1);
-    setExpandedRows({});
-    setSortColumn(dataType === 'audit' ? 'created_timestamp' : propColumns[0]?.key);
-    setSortDirection('desc');
-  }, [data, dataType, propColumns]);
-
-  const getTradeId = (event: ProcessedAuditEvent) => {
-      if (event.parsed_payload) {
-          return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
-      }
-      return null;
-  }
-
-  const sortedData = useMemo(() => {
-    return [...data].sort((a, b) => {
-      let aValue = a[sortColumn];
-      let bValue = b[sortColumn];
-
-      if (dataType === 'audit' && sortColumn === 'user.name') {
-        aValue = a.user?.name || '';
-        bValue = b.user?.name || '';
-      } else if (dataType === 'audit' && sortColumn === 'difference') {
-        aValue = a.parsed_difference_list?.[0]?.field || '';
-        bValue = b.parsed_difference_list?.[0]?.field || '';
-      } else if (dataType === 'audit' && sortColumn === 'tradeId') {
-        aValue = getTradeId(a) || '';
-        bValue = getTradeId(b) || '';
-      }
-      
-      if (dataType === 'audit' && sortColumn === 'created_timestamp') {
-        aValue = new Date(aValue).getTime();
-        bValue = new Date(bValue).getTime();
-      }
-
-      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
-      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }, [data, sortColumn, sortDirection, dataType]);
-
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * rowsPerPage;
-    return sortedData.slice(startIndex, startIndex + rowsPerPage);
-  }, [sortedData, currentPage, rowsPerPage]);
-
-  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
-
-  const isDate = (s: any) => {
-      if (s === null || s === undefined || typeof s !== 'string') return false;
-      const isIsoDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s);
-      if (isIsoDate) return true;
-      const date = new Date(s);
-      return !isNaN(date.getTime()) && s.length > 5;
-  };
-  
-  const formatValue = (value: any) => {
-      if (isDate(value)) {
-          try {
-              return format(new Date(value), 'PPpp');
-          } catch {
-              return String(value);
-          }
-      }
-      if (typeof value === 'object' && value !== null) {
-          return JSON.stringify(value);
-      }
-      return String(value ?? '--');
-  };
-
-  const auditHeaders: {label: string, key: string}[] = [
-    { label: '', key: 'expand'},
-    { label: 'Timestamp', key: 'created_timestamp'},
-    { label: 'Entity', key: 'entity_name'},
-    { label: 'Action', key: 'action'},
-    { label: 'Trade ID', key: 'tradeId'},
-    { label: 'User', key: 'user.name'},
-    { label: 'Difference', key: 'difference' },
-    { label: 'Difference List', key: 'difference_list' },
-    { label: 'Payload', key: 'payload' },
-  ];
-
-  const genericHeaders: {label: string, key: string}[] = [
-      { label: '', key: 'expand'},
-      ...propColumns.map(c => ({ label: c.name, key: c.key }))
-  ];
-
-  const headers = dataType === 'audit' ? auditHeaders : genericHeaders;
-
-  const TruncatedCell = ({ value }: { value: string | null | undefined }) => {
-    const text = value === 'NULL' ? '--' : String(value || '--');
-    const isTruncated = text.length > 50;
-    return (
-        <div className="max-w-[200px] truncate" title={text}>
-            {isTruncated ? text.substring(0, 50) + '...' : text}
-        </div>
-    )
-  }
-
-  const renderDiff = (diff: any) => {
-    const formatDiffValue = (value: any) => {
-      let displayValue = String(value ?? 'none');
-      if (displayValue.length > 30) {
-        displayValue = displayValue.substring(0, 30) + '...';
-      }
-      return <span className='font-mono text-xs' title={String(value ?? 'none')}>{`"${displayValue}"`}</span>
-    };
-
-    return (
-      <div className='py-1'>
-        <span className="font-semibold capitalize">{(diff.label || diff.field || '').replace(/_/g, ' ')}:</span>
-        <span className="text-muted-foreground line-through ml-2">{formatDiffValue(diff.oldValue)}</span>
-        <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
-        <span className='text-foreground'>{formatDiffValue(diff.newValue)}</span>
-      </div>
-    );
-  };
-
-  return (
-    <div className="border rounded-lg overflow-hidden h-full flex flex-col">
-       <div className="flex-grow overflow-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 sticky top-0">
-            <tr>
-              {headers.map(header => (
-                <th key={header.key} className="p-2 text-left font-semibold whitespace-nowrap">
-                  {header.label ? (
-                     <Button variant="ghost" onClick={() => handleSort(header.key)}>
-                        {header.label}
-                        {sortColumn === header.key && (
-                            sortDirection === 'asc' ? <ArrowUp className="w-3 h-3 ml-2" /> : <ArrowDown className="w-3 h-3 ml-2" />
-                        )}
-                    </Button>
-                  ) : <div className="w-8"></div>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedData.map((event, index) => {
-                const globalIndex = ((currentPage - 1) * rowsPerPage) + index;
-                const isExpanded = expandedRows[globalIndex];
-                
-                if (dataType === 'audit') {
-                    const isUpdate = event.action.toLowerCase().includes('update');
-                    const diffs = (isUpdate && Array.isArray(event.parsed_difference_list)) ? event.parsed_difference_list : [null];
-                    const rowSpan = diffs.length > 0 ? diffs.length : 1;
-                    const tradeId = getTradeId(event);
-                    return (
-                      <Fragment key={globalIndex}>
-                        {diffs.map((diff, diffIndex) => (
-                          <tr key={`${globalIndex}-${diffIndex}`} className="border-b">
-                            {diffIndex === 0 && (
-                              <>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>
-                                    <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
-                                        {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                    </Button>
-                                </td>
-                                <td className="p-2 align-top whitespace-nowrap" rowSpan={rowSpan}>{format(new Date(event.created_timestamp), 'PPpp')}</td>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.entity_name}</td>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.action}</td>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>{tradeId || <span className="text-muted-foreground">--</span>}</td>
-                                <td className="p-2 align-top" rowSpan={rowSpan}>{event.user?.name || 'N/A'}</td>
-                              </>
-                            )}
-                             <td className="p-2 align-top">
-                              {diff ? renderDiff(diff) : <span className="text-muted-foreground">--</span>}
-                            </td>
-                             {diffIndex === 0 && (
-                                 <>
-                                    <td className="p-2 align-top" rowSpan={rowSpan}>
-                                        <TruncatedCell value={event.difference_list} />
-                                    </td>
-                                    <td className="p-2 align-top" rowSpan={rowSpan}>
-                                        <TruncatedCell value={event.payload} />
-                                    </td>
-                                </>
-                             )}
-                          </tr>
-                        ))}
-                        {isExpanded && (
-                            <tr className="border-b bg-muted/50">
-                                <td colSpan={headers.length} className="p-0">
-                                    {renderDetails(event)}
-                                </td>
-                            </tr>
-                        )}
-                      </Fragment>
-                    )
-                } else { // Generic data
-                    return (
-                        <Fragment key={globalIndex}>
-                            <tr className="border-b">
-                                <td className="p-2">
-                                    <Button variant="ghost" size="icon" onClick={() => toggleRow(globalIndex)} className="h-6 w-6">
-                                        {isExpanded ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                                    </Button>
-                                </td>
-                                {propColumns.map(col => (
-                                    <td key={col.key} className="p-2 align-top max-w-[250px] truncate" title={formatValue(event[col.key])}>
-                                        {formatValue(event[col.key])}
-                                    </td>
-                                ))}
-                            </tr>
-                            {isExpanded && (
-                                <tr className="border-b bg-muted/50">
-                                    <td colSpan={headers.length} className="p-0">
-                                        {renderDetails(event)}
-                                    </td>
-                                </tr>
-                            )}
-                        </Fragment>
-                    )
-                }
-            })}
-          </tbody>
-        </table>
-       </div>
-        {totalPages > 1 && (
-            <div className="flex-shrink-0 flex items-center justify-between p-2 border-t">
-                <p className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                </p>
-                <div className="flex gap-2">
-                    <Button 
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                    >
-                        Previous
-                    </Button>
-                    <Button 
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                    >
-                        Next
-                    </Button>
-                </div>
-            </div>
-        )}
-    </div>
-  )
-}
 
 export default function AuditTimeline() {
   const [data, setData] = useState<any[]>([]);
@@ -1139,6 +868,13 @@ export default function AuditTimeline() {
     
     if (dataType === 'audit') {
         const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Difference', 'Difference List', 'Payload'];
+        const getTradeId = (event: ProcessedAuditEvent) => {
+            if (event.parsed_payload) {
+                return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
+            }
+            return null;
+        }
+
         filteredData.forEach(event => {
             const isUpdate = event.action.toLowerCase().includes('update');
             const diffs = (isUpdate && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
@@ -1153,6 +889,7 @@ export default function AuditTimeline() {
                     row['Entity'] = event.entity_name;
                     row['Action'] = event.action;
                     row['User'] = event.user?.name || 'N/A';
+                    row['Trade ID'] = getTradeId(event) || '';
                     row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
                     row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
                 } else {
@@ -1314,15 +1051,15 @@ export default function AuditTimeline() {
                                 </div>
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                     <DialogContent className="max-w-4xl w-full flex flex-col">
-                                         <DialogHeader className="p-6 pb-0 flex-shrink-0"><DialogTitle>{action} on {entity_name}</DialogTitle></DialogHeader>
-                                          <div className="relative h-auto max-h-[80vh] flex-grow">
-                                            <ScrollArea className="h-full w-full">
-                                                <div className="px-6 pb-6">
-                                                    {renderDetails(event)}
-                                                </div>
-                                            </ScrollArea>
+                                     <DialogContent className="max-w-4xl p-0">
+                                        <ScrollArea className="max-h-[90vh]">
+                                          <div className="p-6">
+                                            <DialogHeader className="pb-4">
+                                              <DialogTitle>{action} on {entity_name}</DialogTitle>
+                                            </DialogHeader>
+                                            {renderDetails(event)}
                                           </div>
+                                        </ScrollArea>
                                     </DialogContent>
                                 </Dialog>
                             </div>
@@ -1333,7 +1070,7 @@ export default function AuditTimeline() {
                     </VerticalTimeline>
                 </ScrollArea>
             ) : (
-                <SimpleTable data={filteredData} columns={columns} dataType={dataType!} />
+                <DataGrid data={filteredData} columns={columns} dataType={dataType!} />
             )}
           </div>
       </div>
