@@ -572,6 +572,14 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
+const AUDIT_LOG_COLUMNS = [
+    { key: 'created_timestamp', name: 'Timestamp' },
+    { key: 'entity_name', name: 'Entity' },
+    { key: 'action', name: 'Action' },
+    { key: 'user', name: 'User' },
+    { key: 'payload', name: 'Payload' },
+    { key: 'difference_list', name: 'Difference List' },
+];
 
 export default function AuditTimeline() {
   const [data, setData] = useState<any[]>([]);
@@ -728,6 +736,7 @@ export default function AuditTimeline() {
           if (isAuditLog) {
               setDataType('audit');
               setActiveView('timeline');
+              setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
           } else {
               const fileColumns = headers.map(header => ({ key: header, name: header, resizable: true }));
               setColumns(fileColumns);
@@ -943,8 +952,8 @@ export default function AuditTimeline() {
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-3xl">
                     <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
-                    <div className="relative h-auto max-h-[80vh]">
-                        <ScrollArea className="h-full w-full">
+                    <div className="relative max-h-[80vh]">
+                         <ScrollArea className="h-full w-full">
                             <div className="py-4">
                                 {isAnalyzing && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8">
@@ -1052,14 +1061,16 @@ export default function AuditTimeline() {
                                 <Dialog>
                                     <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
                                      <DialogContent className="max-w-4xl p-0">
-                                        <ScrollArea className="max-h-[90vh]">
-                                          <div className="p-6">
-                                            <DialogHeader className="pb-4">
-                                              <DialogTitle>{action} on {entity_name}</DialogTitle>
-                                            </DialogHeader>
-                                            {renderDetails(event)}
-                                          </div>
-                                        </ScrollArea>
+                                        <div className="max-h-[90vh] overflow-hidden flex flex-col">
+                                          <DialogHeader className="p-6 pb-4 shrink-0">
+                                            <DialogTitle>{action} on {entity_name}</DialogTitle>
+                                          </DialogHeader>
+                                          <ScrollArea className="flex-grow min-h-0">
+                                            <div className="px-6 pb-6">
+                                                {renderDetails(event)}
+                                            </div>
+                                          </ScrollArea>
+                                        </div>
                                     </DialogContent>
                                 </Dialog>
                             </div>
