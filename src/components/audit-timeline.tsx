@@ -583,7 +583,7 @@ const AUDIT_LOG_COLUMNS = [
 
 export default function AuditTimeline() {
   const [data, setData] = useState<any[]>([]);
-  const [columns, setColumns] = useState<{key: string, name: string}[]>([]);
+  const [columns, setColumns] = useState<{key: string, name: string}[]>(AUDIT_LOG_COLUMNS);
   const [dataType, setDataType] = useState<'audit' | 'generic' | null>(null);
   
   const [fileName, setFileName] = useState<string | null>(null);
@@ -795,7 +795,7 @@ export default function AuditTimeline() {
                 user: e.user?.name,
                 details: e.payload === 'NULL' ? e.difference_list : e.payload
             })).join('\n');
-
+            
             const result = await analyzeLogIncident({ logs: logString });
             setAnalysisResult(result);
         } catch (e: any) {
