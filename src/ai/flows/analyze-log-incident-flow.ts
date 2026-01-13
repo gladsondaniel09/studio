@@ -55,7 +55,7 @@ Logs to analyze:
 ${logs}`;
 
     const { text } = await ai.generate({
-      model: 'openai/sonar',
+      model: 'sonar-small-32k-online',
       prompt: prompt,
       config: {
         temperature: 0.2,
