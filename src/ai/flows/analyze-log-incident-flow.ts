@@ -8,6 +8,7 @@ import {
   IncidentAnalysisOutputSchema,
 } from '@/lib/types';
 import { z } from 'zod';
+import { openAI } from 'genkitx-openai';
 
 // Temporary debug helper - logs to server console and returns safe error
 function logAndThrowSafe(error: any, context: string) {
@@ -54,8 +55,8 @@ Example:
 Logs to analyze:
 ${logs}`;
 
-    const { text } = await ai.generate({
-      model: 'gpt-4o',
+    const response = await ai.generate({
+      model: openAI.model('gpt-4o'),
       prompt: prompt,
       config: {
         temperature: 0.2,
@@ -67,26 +68,22 @@ ${logs}`;
       },
     });
     
-    if (!text) {
+    const output = response.output();
+    if (!output) {
         throw new Error('No content returned from AI analysis.');
     }
     
-    // The output from ai.generate with format: 'json' is already a parsed object
-    // but we can re-parse to be safe, especially if the model doesn't respect instructions perfectly.
     let parsed;
-    try {
-        parsed = JSON.parse(text);
-    } catch(e) {
-        // If it's not valid JSON, it might be the object was returned directly.
-        // Let's see if the text itself validates against the schema.
+    // When format: 'json' is used, the output can be an object or a string.
+    if (typeof output === 'string') {
         try {
-            const validationResult = IncidentAnalysisOutputSchema.parse(text);
-            return validationResult;
-        } catch (zodErr) {
-             throw new Error(`Failed to parse AI response. Content: ${text.slice(0, 200)}`);
+            parsed = JSON.parse(output);
+        } catch(e) {
+            throw new Error(`Failed to parse AI response as JSON. Content: ${output.slice(0, 200)}`);
         }
+    } else {
+        parsed = output;
     }
-
 
     const validationResult = IncidentAnalysisOutputSchema.parse(parsed);
     return validationResult;
