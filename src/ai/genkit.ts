@@ -1,12 +1,11 @@
 
 import { genkit } from 'genkit';
-import { openAI } from 'genkitx-openai';
+import { groq } from 'genkitx-groq';
 
 export const ai = genkit({
   plugins: [
-    openAI({
+    groq({
       apiKey: process.env.GROQ_API_KEY,
-      baseURL: 'https://api.groq.com/openai/v1',
     }),
   ],
   logLevel: 'debug',

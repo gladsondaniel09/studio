@@ -42,7 +42,7 @@ ${logs}`;
 
     const response = await ai.generate({
       // Using Llama 3.3 70B on Groq for high performance and low cost
-      model: 'openai/llama-3.3-70b-versatile',
+      model: 'groq/llama-3.3-70b-versatile',
       prompt: promptText,
       config: {
         temperature: 0.1,
