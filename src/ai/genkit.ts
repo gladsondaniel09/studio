@@ -1,10 +1,11 @@
-import { genkit, ModelReference } from 'genkit';
-import { openAI } from 'genkitx-openai';
+
+import { genkit } from 'genkit';
+import { anthropic } from '@genkit-ai/anthropic';
 
 export const ai = genkit({
   plugins: [
-    openAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
     }),
   ],
   logLevel: 'debug',

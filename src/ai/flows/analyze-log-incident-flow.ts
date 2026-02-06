@@ -1,3 +1,4 @@
+
 'use server';
 
 import { ai } from '@/ai/genkit';
@@ -6,11 +7,9 @@ import {
   type IncidentAnalysisOutput,
   IncidentAnalysisOutputSchema,
 } from '@/lib/types';
-import { z } from 'zod';
-import { openAI } from 'genkitx-openai';
 
 /**
- * @fileOverview A flow to analyze audit logs and generate a bug report.
+ * @fileOverview A flow to analyze audit logs and generate a bug report using Claude.
  * 
  * - analyzeLogIncident - The main function to trigger AI analysis.
  */
@@ -42,7 +41,7 @@ Logs to analyze:
 ${logs}`;
 
     const response = await ai.generate({
-      model: 'openai/gpt-4o', // Using fully qualified model name
+      model: 'anthropic/claude-3-5-sonnet-latest',
       prompt: promptText,
       config: {
         temperature: 0.1,
