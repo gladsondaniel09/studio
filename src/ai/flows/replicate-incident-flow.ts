@@ -10,7 +10,8 @@ import {
 /**
  * @fileOverview A specialized flow to generate high-fidelity business process replication scripts for Xceler.
  * 
- * - replicateIncident - Generates a detailed step-by-step reproduction guide using Xceler CTRM domain language and module references.
+ * - replicateIncident - Generates a detailed step-by-step reproduction guide using Xceler CTRM domain language, 
+ *   precise data extraction (quantities, IDs, names), and specific module navigation.
  */
 
 export async function replicateIncident(
@@ -27,37 +28,32 @@ export async function replicateIncident(
         : input.logs;
 
     const promptText = `You are a senior Subject Matter Expert in the Xceler Commodity Trading and Risk Management (CTRM) system.
-Analyze the following audit logs and generate a formal, high-fidelity business process replication script tailored for the Xceler platform.
+Analyze the following audit logs and generate a formal, high-fidelity business process replication script.
 
-Your goal is to describe exactly how a user would reproduce the state described in the logs using Xceler's specific modules, navigation, and professional terminology as defined in the system manual.
+CRITICAL REQUIREMENT: You MUST be extremely detailed with values. Extract and include:
+- Exact Quantities and UOMs (e.g., 20,000 MT, 3,999.781 MT).
+- Specific Reference Numbers (Trade IDs, BL Numbers, Invoice IDs).
+- Vessel Names and Voyage IDs.
+- Profit Centers and Counterparty Names.
+- Precise Dates (BL Dates, Trade Dates).
 
-Xceler Modules & Terminology to use:
-- Business Master: Company, Profit Center, Counterparty, Commodity, Vessel Master, Grade Master.
-- Trade Creation: Physical Trade (Beta), Paper Trade (Beta), Deal Slip, Inter-ProfitCenter, Inter-Company, Future Trade, FX Trade.
-- Operations Dashboard: Split Obligation, Merge Obligation, Declare Port, Quick Washout, Add Shipping Details.
-- Planning & Matching: Back-to-Back (Physical/Paper Planning), Vessel Planning (Bulk), Washout Plan, Doc Bypass (String/Beginning/End).
-- Actualization: Trade Actualization, Load/Unload, Split BL, Quality Claims, Quantity Claims, De-actualize.
-- Inventory Management: Build Inventory (GRN Actualization), Transfer Stock (Write-On/Off), Draw Inventory (GI/Goods Issue), Blending, Suspense Inventory.
-- Finance & Settlement: Settlement (Trade & Cost), Commercial Invoice, Staggered Pricing, Outturn/Final Invoice, Post/Un-post Invoice, e-Invoice Hub.
-- Reporting: Report Dashboard, Risk Dashboard, EOD Dashboard.
+Your goal is to describe exactly how a user would reproduce the state described in the logs using Xceler's specific modules and navigation as described in the system manual.
 
-Specific Actions:
-- "Send for Approval" (Confirming Trades/Terms).
-- "Amend Trade" / "Unconfirm Trade".
-- "Allocate Transport" (Vessel/Road).
-- "POST" (Finalizing Invoices to SAP/ERP).
-- "Actualize Quantity" (GRN for Build, GI for Draw).
+Xceler Modules & Terminology Mapping:
+- Trade Entry: [Physical Trade (Beta)], [Paper Trade (Beta)], or [Deal Slip].
+- Operations: [Operations Dashboard] -> "Split Obligation" (use suffixes A, B, C...), "Merge Obligation", "Declare Port".
+- Planning: [Vessel Planning] for Bulk or [Physical/Paper Planning] for Containers.
+- Execution: [Trade Actualization] -> "Load/Unload", "Split BL", "Actualize Quantity".
+- Inventory: [Build Inventory] -> "GRN Actualization", [Draw Inventory] -> "GI Actualization".
+- Finance: [Settlement (Trade & Cost)] -> "Generate Commercial Invoice", "Post Invoice".
+- Reporting: [Report Dashboard] -> "Long Cargo Report", "Daily Position & P&L".
 
-The replication script should follow this strict style:
-1. Create a [Contract Type] in [Physical Trade Beta] for [Quantity] [UOM].
-2. Confirm the trade and "Send for Approval".
-3. Navigate to [Operations Dashboard] and "Split Obligation" into [Details].
-4. Go to [Vessel Planning], "Create Plan", and "Allocate Transport" using Vessel [Name].
-5. Actualize the Load Quantity in [Trade Actualization] with BL No [Number].
-6. Generate a [Invoice Type] in [Settlement (Trade & Cost)] and "POST" the invoice.
-...
-N. Open the [Report Name] in [Report Dashboard].
-N+1. Observe the discrepancy: Expected [Field] to be [Value] but system shows [Value].
+Strict Style Guidelines:
+1. Start with contract creation: "Create a [Buy/Sell] Physical Trade for [Qty] [UOM] in Profit Center [PC] with Counterparty [CP]."
+2. Detail splits exactly: "Navigate to [Operations Dashboard] and perform Split Obligation into [N] splits: [List each exact quantity]."
+3. Detail logistics: "Go to [Vessel Planning], Allocate Transport to Vessel [Name], and Actualize Load in [Trade Actualization] using BL No [Number] dated [Date]."
+4. Detail finance: "In [Settlement (Trade & Cost)], generate the Commercial Invoice and click 'POST'."
+5. Conclusion: "Open the [Report Name] in [Report Dashboard]. Search for [Vessel/Trade] and observe the discrepancy: Expected [Value] but found [Value]."
 
 Logs:
 ${logs}`;
@@ -66,7 +62,7 @@ ${logs}`;
       model: 'groq/llama-3.3-70b-versatile',
       prompt: promptText,
       config: {
-        temperature: 0.2,
+        temperature: 0.1, // Minimal temperature for precise data extraction
       },
       output: {
         format: 'json',
