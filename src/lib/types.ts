@@ -43,3 +43,10 @@ export const IncidentAnalysisOutputSchema = z.object({
     potential_cause: z.string().describe("The likely technical cause of the issue."),
 });
 export type IncidentAnalysisOutput = z.infer<typeof IncidentAnalysisOutputSchema>;
+
+export const ReplicationOutputSchema = z.object({
+  replication_script: z.array(z.string()).describe("A step-by-step business process script to reproduce the issue in the CTRM system."),
+  context_summary: z.string().describe("Brief context of the business scenario (e.g. Vessel name, Contract types)."),
+  expected_vs_actual: z.string().optional().describe("A comparison of the expected outcome versus the actual observed discrepancy."),
+});
+export type ReplicationOutput = z.infer<typeof ReplicationOutputSchema>;

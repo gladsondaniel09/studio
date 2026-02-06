@@ -8,7 +8,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -39,9 +39,10 @@ import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
-import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput } from '@/lib/types';
+import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput, type ReplicationOutput } from '@/lib/types';
 import { format } from 'date-fns';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
+import { replicateIncident } from '@/ai/flows/replicate-incident-flow';
 import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 
@@ -570,6 +571,60 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
     );
 };
 
+const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => {
+    return (
+        <Card className="mt-4 border-primary/20 bg-primary/5">
+            <CardHeader>
+                <CardTitle className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <ClipboardList className="w-5 h-5 text-primary" />
+                    </span>
+                    <span className="flex-grow">Business Process Replication Script</span>
+                </CardTitle>
+                <CardDescription className="pl-11 font-medium text-foreground/80">
+                    {result.context_summary}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 text-sm pl-11">
+                <div className="bg-card p-4 rounded-lg border shadow-sm">
+                    <h4 className="font-bold flex items-center gap-2 mb-4 text-primary">
+                        <ListOrdered className="w-5 h-5" />
+                        Execution Steps
+                    </h4>
+                    <ol className="list-decimal list-outside pl-5 space-y-3 marker:text-primary marker:font-bold">
+                        {result.replication_script.map((step, i) => (
+                            <li key={i} className="pl-2 text-base leading-relaxed">{step}</li>
+                        ))}
+                    </ol>
+                </div>
+                
+                {result.expected_vs_actual && (
+                    <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg">
+                        <h4 className="font-semibold flex items-center gap-2 mb-2 text-destructive">
+                            <AlertCircle className="w-4 h-4" />
+                            Observation Summary
+                        </h4>
+                        <p className="font-medium">{result.expected_vs_actual}</p>
+                    </div>
+                )}
+
+                <Accordion type="single" collapsible className="w-full pt-2">
+                    <AccordionItem value="raw-json" className="border-none">
+                        <AccordionTrigger className="hover:no-underline py-2">
+                            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+                                <Code className="h-3 w-3" /> Technical Trace
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                           <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Replicate Data" />
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
+            </CardContent>
+        </Card>
+    );
+};
+
 const AUDIT_LOG_COLUMNS = [
     { key: 'created_timestamp', name: 'Timestamp' },
     { key: 'entity_name', name: 'Entity' },
@@ -599,9 +654,14 @@ export default function AuditTimeline() {
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [activeView, setActiveView] = useState<'timeline' | 'table'>('timeline');
+  
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
+
+  const [isReplicating, setIsReplicating] = useState(false);
+  const [replicationResult, setReplicationResult] = useState<ReplicationOutput | null>(null);
+  const [showReplicateDialog, setShowReplicateDialog] = useState(false);
 
   useEffect(() => {
     const hasSeenUpload = localStorage.getItem('hasSeenUploadWalkthrough');
@@ -766,6 +826,7 @@ export default function AuditTimeline() {
     setSortOrder('desc');
     setSelectedFlowEntities(null);
     setAnalysisResult(null);
+    setReplicationResult(null);
   }
   
   const handleStageClick = (entities: string[]) => {
@@ -785,7 +846,6 @@ export default function AuditTimeline() {
         setShowAnalysisDialog(true);
 
         try {
-            // Take the top 100 logs to stay within token limits but provide enough context
             const dataForAnalysis = filteredData.slice(0, 100);
             const logString = dataForAnalysis.map(e => JSON.stringify({
                 timestamp: e.created_timestamp,
@@ -803,6 +863,36 @@ export default function AuditTimeline() {
             setShowAnalysisDialog(false);
         } finally {
             setIsAnalyzing(false);
+        }
+    };
+
+    const handleReplicate = async () => {
+        if (filteredData.length === 0) {
+            toast({ variant: 'destructive', title: 'No Data for Replication', description: 'There are no logs in the current view to process.' });
+            return;
+        }
+
+        setIsReplicating(true);
+        setReplicationResult(null);
+        setShowReplicateDialog(true);
+
+        try {
+            const dataForReplication = filteredData.slice(0, 100);
+            const logString = dataForReplication.map(e => JSON.stringify({
+                timestamp: e.created_timestamp,
+                action: e.action,
+                entity: e.entity_name,
+                details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
+            })).join('\n');
+            
+            const result = await replicateIncident({ logs: logString });
+            setReplicationResult(result);
+        } catch (e: any) {
+            console.error(e);
+            toast({ variant: 'destructive', title: 'Replication Failed', description: e.message || 'Failed to generate replication steps.' });
+            setShowReplicateDialog(false);
+        } finally {
+            setIsReplicating(false);
         }
     };
 
@@ -967,6 +1057,26 @@ export default function AuditTimeline() {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            <Dialog open={showReplicateDialog} onOpenChange={setShowReplicateDialog}>
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader><DialogTitle>High-Fidelity Replication Script</DialogTitle></DialogHeader>
+                    <div className="relative max-h-[80vh]">
+                         <ScrollArea className="h-full w-full">
+                            <div className="py-4">
+                                {isReplicating && (
+                                    <div className="flex flex-col items-center justify-center gap-4 p-8">
+                                        <Loader className="w-10 h-10 animate-spin text-primary" />
+                                        <p className="text-muted-foreground">Generating replication process... Using business domain logic.</p>
+                                    </div>
+                                )}
+                                {replicationResult && <ReplicationResultDisplay result={replicationResult} />}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
           <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
               <div className='flex items-center gap-3'>
                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
@@ -982,16 +1092,10 @@ export default function AuditTimeline() {
                     <div className="flex items-center gap-2">
                         <Button onClick={handleAnalyze} disabled={isAnalyzing}>
                             {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
-                            Analyze
+                            Analyse
                         </Button>
-                        <Button variant="outline" onClick={() => {
-                            if (analysisResult) {
-                                setShowAnalysisDialog(true);
-                            } else {
-                                handleAnalyze();
-                            }
-                        }} disabled={isAnalyzing}>
-                            <TestTube2 className="mr-2 h-4 w-4" />
+                        <Button variant="outline" onClick={handleReplicate} disabled={isReplicating}>
+                            {isReplicating ? <Loader className="mr-2 animate-spin" /> : <TestTube2 className="mr-2 h-4 w-4" />}
                             Replicate
                         </Button>
                     </div>
