@@ -978,10 +978,24 @@ export default function AuditTimeline() {
                   </h1>
               </div>
                <div className="flex-shrink-0 flex items-center gap-2">
-                  {dataType === 'audit' && <Button onClick={handleAnalyze} disabled={isAnalyzing}>
-                      {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
-                      Analyze
-                  </Button>}
+                  {dataType === 'audit' && (
+                    <div className="flex items-center gap-2">
+                        <Button onClick={handleAnalyze} disabled={isAnalyzing}>
+                            {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
+                            Analyze
+                        </Button>
+                        <Button variant="outline" onClick={() => {
+                            if (analysisResult) {
+                                setShowAnalysisDialog(true);
+                            } else {
+                                handleAnalyze();
+                            }
+                        }} disabled={isAnalyzing}>
+                            <TestTube2 className="mr-2 h-4 w-4" />
+                            Replicate
+                        </Button>
+                    </div>
+                  )}
                   <ThemeToggle />
               </div>
           </header>
