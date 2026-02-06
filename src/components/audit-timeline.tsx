@@ -1,5 +1,3 @@
-
-
 'use client';
 
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
@@ -261,7 +259,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
         }
     }
 
-    const hasRawDetails = payload !== "NULL" || difference_list !== "NULL";
+    const hasRawDetails = (payload && payload !== "NULL") || (difference_list && difference_list !== "NULL");
 
     return (
         <div className="p-4">
@@ -787,20 +785,22 @@ export default function AuditTimeline() {
         setShowAnalysisDialog(true);
 
         try {
-            const dataForAnalysis = filteredData.slice(0, 200);
+            // Take the top 100 logs to stay within token limits but provide enough context
+            const dataForAnalysis = filteredData.slice(0, 100);
             const logString = dataForAnalysis.map(e => JSON.stringify({
                 timestamp: e.created_timestamp,
                 action: e.action,
                 entity: e.entity_name,
                 user: e.user?.name,
-                details: e.payload === 'NULL' ? e.difference_list : e.payload
+                details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
             })).join('\n');
             
             const result = await analyzeLogIncident({ logs: logString });
             setAnalysisResult(result);
         } catch (e: any) {
             console.error(e);
-            toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred.' });
+            toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred during analysis.' });
+            setShowAnalysisDialog(false);
         } finally {
             setIsAnalyzing(false);
         }
@@ -876,7 +876,7 @@ export default function AuditTimeline() {
     const dataToExport = [];
     
     if (dataType === 'audit') {
-        const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Difference', 'Difference List', 'Payload'];
+        const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
         const getTradeId = (event: ProcessedAuditEvent) => {
             if (event.parsed_payload) {
                 return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
