@@ -9,7 +9,7 @@ import {
 } from '@/lib/types';
 
 /**
- * @fileOverview A flow to analyze audit logs and generate a bug report using Claude.
+ * @fileOverview A flow to analyze audit logs and generate a bug report using Grok.
  * 
  * - analyzeLogIncident - The main function to trigger AI analysis.
  */
@@ -41,11 +41,10 @@ Logs to analyze:
 ${logs}`;
 
     const response = await ai.generate({
-      model: 'anthropic/claude-3-5-sonnet-latest',
+      model: 'openai/grok-beta',
       prompt: promptText,
       config: {
         temperature: 0.1,
-        maxOutputTokens: 1500,
       },
       output: {
         format: 'json',
