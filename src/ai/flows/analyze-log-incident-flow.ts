@@ -9,7 +9,7 @@ import {
 } from '@/lib/types';
 
 /**
- * @fileOverview A flow to analyze audit logs and generate a bug report using Grok.
+ * @fileOverview A flow to analyze audit logs and generate a bug report using Groq (Llama 3.3).
  * 
  * - analyzeLogIncident - The main function to trigger AI analysis.
  */
@@ -41,7 +41,8 @@ Logs to analyze:
 ${logs}`;
 
     const response = await ai.generate({
-      model: 'openai/grok-beta',
+      // Using Llama 3.3 70B on Groq for high performance and low cost
+      model: 'openai/llama-3.3-70b-versatile',
       prompt: promptText,
       config: {
         temperature: 0.1,
