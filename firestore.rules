@@ -1,0 +1,97 @@
+rules_version = '2';
+
+/**
+ * FIRESTORE SECURITY RULES
+ * 
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model using path-based authorization. 
+ * By nesting all data under the /users/{userId} hierarchy, the system ensures 
+ * that authorization is performant and scales without the need for additional 
+ * cross-document lookups (get() calls).
+ * 
+ * Data Structure:
+ * - /users/{userId}/audits/{auditId}: Primary collection for user-owned audits.
+ * - /users/{userId}/audits/{auditId}/keyMetrics/{keyMetricId}: Subcollection 
+ *   containing granular metrics associated with a specific audit.
+ * 
+ * Key Security Decisions:
+ * - Ownership is determined by the {userId} wildcard in the document path.
+ * - All write operations (create, update, delete) require a verified auth UID 
+ *   matching the path.
+ * - Relational integrity is enforced by validating that internal document IDs 
+ *   (e.g., auditId) match their location in the path during creation and 
+ *   remain immutable during updates.
+ * - This configuration is optimized for Prototyping Mode: strict on access 
+ *   rights but flexible on data types and non-relational fields.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+
+    /**
+     * @description Checks if the request is made by an authenticated user.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Ensures the user is the owner and the document currently exists.
+     * Used for update and delete operations to prevent actions on non-existent data.
+     */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the Audit collection.
+     * @path /users/{userId}/audits/{auditId}
+     * @allow (get) If the user is the owner of the path.
+     * @deny (list) If the authenticated UID does not match the userId in the path.
+     * @principle Restricts access to a user's own data tree and validates path consistency.
+     */
+    match /users/{userId}/audits/{auditId} {
+      // Reads
+      allow get, list: if isOwner(userId);
+      
+      // Writes
+      allow create: if isOwner(userId) && request.resource.data.id == auditId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for the KeyMetric subcollection.
+       * @path /users/{userId}/audits/{auditId}/keyMetrics/{keyMetricId}
+       * @allow (create) If user owns the path and data.auditId matches the parent path.
+       * @deny (update) If the request attempts to change the auditId relationship.
+       * @principle Inherits ownership from the parent path and enforces relational integrity.
+       */
+      match /keyMetrics/{keyMetricId} {
+        // Reads
+        allow get, list: if isOwner(userId);
+        
+        // Writes
+        allow create: if isOwner(userId) && request.resource.data.auditId == auditId;
+        allow update: if isExistingOwner(userId) && request.resource.data.auditId == resource.data.auditId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+
+    // --- Default Deny ---
+    // Explicitly deny any access to paths not defined above.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

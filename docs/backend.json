@@ -1,0 +1,134 @@
+{
+  "entities": {
+    "Audit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Audit",
+      "type": "object",
+      "description": "Represents a Firebase Studio audit.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Audit entity."
+        },
+        "link": {
+          "type": "string",
+          "description": "The Firebase Studio audit link.",
+          "format": "uri"
+        },
+        "analysisResult": {
+          "type": "string",
+          "description": "AI analysis result of the audit."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Concise summary of insights from the audit results."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the audit was performed.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "link",
+        "analysisResult",
+        "summary",
+        "timestamp"
+      ]
+    },
+    "KeyMetric": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "KeyMetric",
+      "type": "object",
+      "description": "Represents a key metric extracted from a Firebase Studio audit.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the KeyMetric entity."
+        },
+        "auditId": {
+          "type": "string",
+          "description": "Reference to Audit. (Relationship: Audit 1:N KeyMetric)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the key metric."
+        },
+        "value": {
+          "type": "number",
+          "description": "Value of the key metric."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measurement for the key metric (e.g., 'ms', '%')."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the key metric."
+        }
+      },
+      "required": [
+        "id",
+        "auditId",
+        "name",
+        "value"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}/audits/{auditId}",
+        "definition": {
+          "entityName": "Audit",
+          "schema": {
+            "$ref": "#/backend/entities/Audit"
+          },
+          "description": "Stores audit data for a specific user. Path-based ownership ensures that only the user with the matching `userId` can access audits. The 'userId' is used for authorization and must match `request.auth.uid`.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the audit data."
+            },
+            {
+              "name": "auditId",
+              "description": "The unique identifier of the audit."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/audits/{auditId}/keyMetrics/{keyMetricId}",
+        "definition": {
+          "entityName": "KeyMetric",
+          "schema": {
+            "$ref": "#/backend/entities/KeyMetric"
+          },
+          "description": "Stores key metrics associated with a specific audit. Inherits path-based ownership from the parent audit. Authorization is determined by the `userId` and `auditId` in the path, ensuring only the owner of the audit can access its key metrics.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the audit and key metric data."
+            },
+            {
+              "name": "auditId",
+              "description": "The unique identifier of the audit this key metric belongs to."
+            },
+            {
+              "name": "keyMetricId",
+              "description": "The unique identifier of the key metric."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to facilitate secure and scalable storage of audit data from Firebase Studio, focusing on Authorization Independence, Clarity, and QAPs. The core structure revolves around organizing audits under user-specific collections to ensure clear ownership and access control. Key metrics associated with each audit are stored in a subcollection to maintain a clear relationship between audits and their extracted data. This design promotes easy querying, filtering, and data visualization as requested by the user.\n\n**Authorization Independence:** Audits and their key metrics are stored under the `/users/{userId}` path. This eliminates the need for `get()` calls in security rules as ownership is inherently tied to the path. The `members` map is not required here because access is based on path ownership.\n\n**QAPs:** Segregation is achieved by storing data with different access requirements in separate collections. Path-based ownership (`/users/{userId}/audits/{auditId}`) allows for secure `list` operations, fulfilling the QAPs. Security rules can easily enforce that only the authenticated user (`request.auth.uid == userId`) can access data under their respective user ID."
+  }
+}
