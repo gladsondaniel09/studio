@@ -7,13 +7,14 @@ import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Button } from './ui/button';
-import { Maximize, Search, X, Filter, ChevronDown } from 'lucide-react';
+import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { renderDetails } from './audit-timeline';
 import { Input } from './ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Checkbox } from './ui/checkbox';
 import { cn } from '@/lib/utils';
+import { Separator } from './ui/separator';
 
 type GenericRow = { [key: string]: any };
 
@@ -21,6 +22,11 @@ interface DataGridProps {
   data: (ProcessedAuditEvent | GenericRow)[];
   columns: { key: string; name: string }[];
   dataType: 'audit' | 'generic';
+}
+
+interface SortConfig {
+  columnKey: string | null;
+  direction: 'ASC' | 'DESC' | null;
 }
 
 function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
@@ -54,6 +60,7 @@ const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
 
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
   
   // Custom Filter Dropdown Header
   const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
@@ -71,6 +78,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     );
 
     const selected = filters[columnKey] || [];
+    const isSorted = sortConfig.columnKey === columnKey;
 
     const handleToggle = (val: string) => {
       setFilters(prev => {
@@ -96,30 +104,63 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
       });
     };
 
+    const handleSort = (direction: 'ASC' | 'DESC') => {
+      setSortConfig({ columnKey, direction });
+    };
+
     return (
       <div className="flex items-center justify-between w-full px-2 py-1 group">
-        <span className="font-bold text-xs uppercase tracking-wider truncate mr-1" title={column.name as string}>
-          {column.name}
-        </span>
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <span className="font-bold text-xs uppercase tracking-wider truncate" title={column.name as string}>
+            {column.name}
+          </span>
+          {isSorted && (
+            sortConfig.direction === 'ASC' ? <SortAsc className="h-3 w-3 text-primary shrink-0" /> : <SortDesc className="h-3 w-3 text-primary shrink-0" />
+          )}
+        </div>
         
         <Popover>
           <PopoverTrigger asChild>
             <button 
               className={cn(
                 "p-1 rounded hover:bg-muted transition-colors",
-                selected.length > 0 ? "text-primary bg-primary/10" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+                (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground opacity-0 group-hover:opacity-100"
               )}
               onClick={(e) => e.stopPropagation()}
             >
-              <Filter className="h-3 w-3" />
+              <Filter className="h-3.5 w-3.5" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-64 p-0" align="start">
-            <div className="flex items-center justify-between p-2 border-b">
-              <Button variant="ghost" size="sm" className="h-7 text-xs text-primary font-bold hover:bg-transparent" onClick={() => {}}>Apply</Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:bg-transparent" onClick={handleClear}>Clear</Button>
+            <div className="p-2 space-y-1">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full justify-start h-8 text-xs font-medium"
+                onClick={() => handleSort('ASC')}
+              >
+                <ArrowUpAZ className="mr-2 h-4 w-4 text-muted-foreground" />
+                Sort A to Z
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="w-full justify-start h-8 text-xs font-medium"
+                onClick={() => handleSort('DESC')}
+              >
+                <ArrowDownZA className="mr-2 h-4 w-4 text-muted-foreground" />
+                Sort Z to A
+              </Button>
             </div>
-            <div className="p-2 border-b">
+            
+            <Separator />
+
+            <div className="flex items-center justify-between p-2">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Text Filters</span>
+              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground hover:bg-transparent" onClick={handleClear}>Clear</Button>
+            </div>
+            
+            <div className="px-2 pb-2">
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input 
@@ -130,11 +171,27 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                 />
               </div>
             </div>
-            <ScrollArea className="h-48">
+            
+            <ScrollArea className="h-48 border-t">
               <div className="p-2 space-y-1">
                 {filteredOptions.length === 0 && (
                   <p className="text-[10px] text-muted-foreground text-center py-4">No values found</p>
                 )}
+                <div className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors" onClick={() => {
+                  if (selected.length === uniqueValues.length) {
+                    handleClear();
+                  } else {
+                    setFilters(prev => ({ ...prev, [columnKey]: uniqueValues }));
+                  }
+                }}>
+                  <Checkbox 
+                    checked={selected.length === uniqueValues.length} 
+                    className="h-3.5 w-3.5"
+                  />
+                  <label className="text-[11px] font-medium leading-none cursor-pointer truncate">
+                    (Select All)
+                  </label>
+                </div>
                 {filteredOptions.map((val) => (
                   <div key={val} className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors" onClick={() => handleToggle(val)}>
                     <Checkbox 
@@ -152,11 +209,15 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                 ))}
               </div>
             </ScrollArea>
+            <div className="p-2 bg-muted/30 flex justify-end gap-2 border-t">
+               <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => {}}>Cancel</Button>
+               <Button size="sm" className="h-7 text-[10px]" onClick={() => {}}>OK</Button>
+            </div>
           </PopoverContent>
         </Popover>
       </div>
     );
-  }, [data, filters]);
+  }, [data, filters, sortConfig]);
 
   // Initial Columns Configuration
   const [columns, setColumns] = useState<readonly Column<any>[]>(() => {
@@ -222,16 +283,32 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     setColumns(nextColumns);
   }, [propColumns, FilterHeader]);
 
-  // Apply Filters to Data
-  const filteredRows = useMemo(() => {
-    return data.filter(row => {
+  // Apply Filters and Sorting to Data
+  const processedRows = useMemo(() => {
+    let filtered = data.filter(row => {
       return Object.entries(filters).every(([key, allowedValues]) => {
         if (!allowedValues || allowedValues.length === 0) return true;
         const cellValue = String(row[key] ?? 'None');
         return allowedValues.includes(cellValue);
       });
     });
-  }, [data, filters]);
+
+    if (sortConfig.columnKey && sortConfig.direction) {
+      filtered = [...filtered].sort((a, b) => {
+        const valA = a[sortConfig.columnKey!];
+        const valB = b[sortConfig.columnKey!];
+        
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+
+        const comparison = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        return sortConfig.direction === 'ASC' ? comparison : -comparison;
+      });
+    }
+
+    return filtered;
+  }, [data, filters, sortConfig]);
 
   const handleColumnsChange = useCallback((newColumns: readonly Column<any>[]) => {
     setColumns(newColumns);
@@ -243,7 +320,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         <DataGrid
           rowKeyGetter={rowKeyGetter}
           columns={columns}
-          rows={filteredRows}
+          rows={processedRows}
           onColumnsChange={handleColumnsChange}
           headerRowHeight={45}
           className="rdg-light h-full border-none"
@@ -252,21 +329,24 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
       </div>
       <div className="p-2 border-t bg-muted/30 text-[10px] text-muted-foreground flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4">
-          <div>Showing {filteredRows.length} of {data.length} records</div>
-          {Object.keys(filters).length > 0 && (
+          <div>Showing {processedRows.length} of {data.length} records</div>
+          {(Object.keys(filters).length > 0 || sortConfig.columnKey) && (
             <Button 
               variant="link" 
               size="sm" 
               className="h-auto p-0 text-[10px] text-primary" 
-              onClick={() => setFilters({})}
+              onClick={() => {
+                setFilters({});
+                setSortConfig({ columnKey: null, direction: null });
+              }}
             >
-              Clear all filters
+              Clear all filters & sorts
             </Button>
           )}
         </div>
         <div className="flex gap-2">
           <span>• Drag headers to rearrange</span>
-          <span>• Click filter icon to refine</span>
+          <span>• Click filter icon to sort & refine</span>
         </div>
       </div>
     </div>
