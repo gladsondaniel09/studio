@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const SampleEventSchema = z.object({
   created_timestamp: z.string().describe('An ISO 8601 timestamp for when the event occurred.'),
   entity_name: z.string().describe('The name of the entity that was affected, e.g., "Trade" or "User Account".'),
+  entity_id: z.string().optional().nullable().describe('The unique identifier for the specific entity instance.'),
   action: z.string().describe('The type of action that occurred (e.g., "create", "update").'),
   payload: z.string().optional().nullable().describe("A JSON string representing the full data object for 'create' or 'delete' actions."),
   difference_list: z.string().optional().nullable().describe("A JSON string of an array of differences for 'update' actions."),

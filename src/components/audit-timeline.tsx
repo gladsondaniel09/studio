@@ -628,6 +628,7 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
 const AUDIT_LOG_COLUMNS = [
     { key: 'created_timestamp', name: 'Timestamp' },
     { key: 'entity_name', name: 'Entity' },
+    { key: 'entity_id', name: 'Entity ID' },
     { key: 'action', name: 'Action' },
     { key: 'user', name: 'User' },
     { key: 'payload', name: 'Payload' },
@@ -966,7 +967,7 @@ export default function AuditTimeline() {
     const dataToExport = [];
     
     if (dataType === 'audit') {
-        const headers = ['Timestamp', 'Entity', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
+        const headers = ['Timestamp', 'Entity', 'Entity ID', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
         const getTradeId = (event: ProcessedAuditEvent) => {
             if (event.parsed_payload) {
                 return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
@@ -986,6 +987,7 @@ export default function AuditTimeline() {
                 if (index === 0) {
                     row['Timestamp'] = format(new Date(event.created_timestamp), 'PPpp');
                     row['Entity'] = event.entity_name;
+                    row['Entity ID'] = event.entity_id || '';
                     row['Action'] = event.action;
                     row['User'] = event.user?.name || 'N/A';
                     row['Trade ID'] = getTradeId(event) || '';
