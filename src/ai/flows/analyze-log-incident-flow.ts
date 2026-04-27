@@ -27,20 +27,33 @@ export async function analyzeLogIncident(
         ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const promptText = `You are a forensic Xceler CTRM systems analyst. Your task is to reconstruct the exact sequence of events from these audit logs to create a replication script for a non-production environment.
+    const promptText = `You are a forensic Xceler CTRM systems analyst. Your task is to provide a granular, chronological breakdown of the trade lifecycle from these audit logs.
 
-CRITICAL INSTRUCTIONS:
+CRITICAL ANALYSIS GUIDELINES:
 1. Examine EVERY log entry's 'differences' (from difference_list) and 'payload'.
-2. Identify the specific Xceler modules used (e.g., [Physical Trade (Beta)], [Operations Dashboard], [Vessel Planning], [Trade Actualization], [Settlement (Trade & Cost)]).
-3. Extract exact technical values: quantities (including decimals like 3,999.781 MT), Trade IDs, BL Numbers, Vessel Names, and Profit Centers.
-4. Your 'steps_to_replicate' must be a chronological, line-by-line reconstruction of the user actions required to mirror these logs exactly.
+2. For the 'lifecycle_breakdown' field, you MUST identify:
+   - WHAT record/event was created or updated.
+   - WHAT fields/data were modified (extract exact technical values: MT quantities, Trade IDs, BL Numbers, Vessel Names).
+   - PLANNING actions: Specify if it is a "Vessel Plan" or another type (Container, Road, etc.).
+   - ACTUALIZATION: Capture BL Dates, quantities, and status changes.
+   - PRICING: Identify Price Fixation vs. Allocation events.
+   - INVOICING: Note creation, regeneration, and POSTING events.
+   - WORKFLOW: Note any status changes (Draft -> Confirmed, etc.).
 
-Fields required in the JSON output:
-- title: A concise, descriptive title for the identified issue.
-- summary: A brief summary of the business scenario (e.g., "5-way BL split and partial blending for Vessel X").
-- steps_to_replicate: A forensic list of actions (e.g., "Create Purchase for 20k MT", "Split into 5 specific quantities...", "POST invoice...").
-- observed_behavior: What the discrepancy was (e.g., "Expected balance 90.311 MT but found 203.828 MT").
-- potential_cause: The likely technical reason for the failure found in the log differences.
+3. For each step in the 'lifecycle_breakdown', mention:
+   - Exactly what happened.
+   - The timestamp from the log.
+   - The impact on the trade status or accounting flow.
+
+4. Generate forensic 'steps_to_replicate' for a non-production environment.
+
+JSON Output Schema:
+- title: Concise issue title.
+- summary: Brief business scenario summary.
+- lifecycle_breakdown: Array of { timestamp, event_name, module, description, impact }.
+- steps_to_replicate: Array of replication steps.
+- observed_behavior: Description of the discrepancy.
+- potential_cause: Root technical cause.
 
 Logs to analyze:
 ${logs}`;

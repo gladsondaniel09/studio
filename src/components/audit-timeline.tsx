@@ -8,7 +8,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -529,7 +529,38 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                     {result.summary}
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 text-sm pl-11">
+            <CardContent className="space-y-8 text-sm pl-11">
+                {/* Lifecycle Breakdown Section */}
+                {result.lifecycle_breakdown && (
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2 mb-4">
+                        <Layers className="w-5 h-5 text-primary" />
+                        Forensic Lifecycle Breakdown
+                    </h4>
+                    <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1px] before:bg-border">
+                        {result.lifecycle_breakdown.map((step, i) => (
+                            <div key={i} className="relative pl-8">
+                                <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-background border-2 border-primary flex items-center justify-center z-10">
+                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{step.timestamp}</span>
+                                        <span className="font-bold text-foreground">{step.event_name}</span>
+                                        <span className="text-[10px] uppercase tracking-wider text-primary font-bold bg-primary/5 px-2 py-0.5 rounded-full border border-primary/20">{step.module}</span>
+                                    </div>
+                                    <p className="text-muted-foreground leading-relaxed italic">{step.description}</p>
+                                    <div className="text-[11px] flex items-start gap-1 text-primary">
+                                        <ArrowRight className="w-3 h-3 mt-0.5 shrink-0" />
+                                        <span className="font-medium">Impact: {step.impact}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
                     <h4 className="font-semibold flex items-center gap-2 mb-2">
                         <ListOrdered className="w-4 h-4 text-muted-foreground" />
@@ -544,14 +575,14 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                         <AlertCircle className="w-4 h-4 text-muted-foreground" />
                         Observed Behavior
                     </h4>
-                    <p>{result.observed_behavior}</p>
+                    <p className="bg-destructive/5 p-3 rounded-lg border border-destructive/20">{result.observed_behavior}</p>
                 </div>
                 <div>
                     <h4 className="font-semibold flex items-center gap-2 mb-2">
                        <TestTube2 className="w-4 h-4 text-muted-foreground" />
                         Potential Cause
                     </h4>
-                    <p className="font-mono bg-muted p-2 rounded text-xs">{result.potential_cause}</p>
+                    <p className="font-mono bg-muted p-3 rounded-lg text-xs leading-relaxed border">{result.potential_cause}</p>
                 </div>
 
                 <Accordion type="single" collapsible className="w-full pt-4">
@@ -1043,15 +1074,15 @@ export default function AuditTimeline() {
             onClose={() => setShowTimelineWalkthrough(false)}
           />}
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
-                <DialogContent className="max-w-3xl">
-                    <DialogHeader><DialogTitle>AI-Generated Bug Report</DialogTitle></DialogHeader>
-                    <div className="relative max-h-[80vh]">
+                <DialogContent className="max-w-4xl">
+                    <DialogHeader><DialogTitle>Forensic Trade Lifecycle Analysis</DialogTitle></DialogHeader>
+                    <div className="relative max-h-[85vh]">
                          <ScrollArea className="h-full w-full">
                             <div className="py-4">
                                 {isAnalyzing && (
                                     <div className="flex flex-col items-center justify-center gap-4 p-8">
                                         <Loader className="w-10 h-10 animate-spin text-primary" />
-                                        <p className="text-muted-foreground">Analyzing logs... This may take a moment.</p>
+                                        <p className="text-muted-foreground">Performing forensic reconstruction... Analyzing data payloads and state changes.</p>
                                     </div>
                                 )}
                                 {analysisResult && <AnalysisResultDisplay result={analysisResult} />}

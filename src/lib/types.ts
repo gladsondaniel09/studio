@@ -39,6 +39,13 @@ export type IncidentAnalysisInput = z.infer<typeof IncidentAnalysisInputSchema>;
 export const IncidentAnalysisOutputSchema = z.object({
     title: z.string().describe("A concise title for the identified issue."),
     summary: z.string().describe("A brief summary of the problem."),
+    lifecycle_breakdown: z.array(z.object({
+        timestamp: z.string().describe("Timestamp from log."),
+        event_name: z.string().describe("Action performed (e.g. Physical Trade Created)."),
+        module: z.string().describe("Xceler module (e.g. physical trade, vessel planning)."),
+        description: z.string().describe("Forensic detail of data changes, IDs, and values."),
+        impact: z.string().describe("Impact on trade lifecycle or status.")
+    })).describe("Detailed chronological breakdown of the trade lifecycle."),
     steps_to_replicate: z.array(z.string()).describe("A list of steps to replicate the issue."),
     observed_behavior: z.string().describe("A description of the incorrect behavior that was observed."),
     potential_cause: z.string().describe("The likely technical cause of the issue."),
