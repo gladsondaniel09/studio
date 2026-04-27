@@ -853,8 +853,9 @@ export default function AuditTimeline() {
                 action: e.action,
                 entity: e.entity_name,
                 user: e.user?.name,
-                details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
-            })).join('\n');
+                payload: e.payload !== 'NULL' ? e.payload : undefined,
+                differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
+            }, (key, value) => value === undefined ? undefined : value)).join('\n');
             
             const result = await analyzeLogIncident({ logs: logString });
             setAnalysisResult(result);

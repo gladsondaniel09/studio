@@ -1,4 +1,3 @@
-
 'use server';
 
 import { ai } from '@/ai/genkit';
@@ -9,9 +8,9 @@ import {
 } from '@/lib/types';
 
 /**
- * @fileOverview A flow to analyze audit logs and generate a bug report using Groq (Llama 3.3).
+ * @fileOverview A forensic flow to analyze audit logs line-by-line and generate a replication script.
  * 
- * - analyzeLogIncident - The main function to trigger AI analysis.
+ * - analyzeLogIncident - Reconstructs the exact sequence of events using difference_list and payload data.
  */
 
 export async function analyzeLogIncident(
@@ -22,30 +21,35 @@ export async function analyzeLogIncident(
       throw new Error('Input logs are empty.');
     }
 
-    // Limit log size to prevent token limit issues or payload size errors
+    // Limit log size to prevent token limit issues
     const logs =
-      input.logs.length > 12000
-        ? input.logs.slice(0, 12000) + '\n[TRUNCATED]'
+      input.logs.length > 15000
+        ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const promptText = `You are a senior QA engineer creating a detailed bug report. Analyze these logs and return a valid JSON object.
+    const promptText = `You are a forensic Xceler CTRM systems analyst. Your task is to reconstruct the exact sequence of events from these audit logs to create a replication script for a non-production environment.
 
-Fields required:
-- title: A concise, descriptive title for the issue.
-- summary: A brief summary of what happened.
-- steps_to_replicate: A list of steps to reproduce the issue.
-- observed_behavior: What actually happened according to the logs.
-- potential_cause: The likely technical reason for the failure.
+CRITICAL INSTRUCTIONS:
+1. Examine EVERY log entry's 'differences' (from difference_list) and 'payload'.
+2. Identify the specific Xceler modules used (e.g., [Physical Trade (Beta)], [Operations Dashboard], [Vessel Planning], [Trade Actualization], [Settlement (Trade & Cost)]).
+3. Extract exact technical values: quantities (including decimals like 3,999.781 MT), Trade IDs, BL Numbers, Vessel Names, and Profit Centers.
+4. Your 'steps_to_replicate' must be a chronological, line-by-line reconstruction of the user actions required to mirror these logs exactly.
+
+Fields required in the JSON output:
+- title: A concise, descriptive title for the identified issue.
+- summary: A brief summary of the business scenario (e.g., "5-way BL split and partial blending for Vessel X").
+- steps_to_replicate: A forensic list of actions (e.g., "Create Purchase for 20k MT", "Split into 5 specific quantities...", "POST invoice...").
+- observed_behavior: What the discrepancy was (e.g., "Expected balance 90.311 MT but found 203.828 MT").
+- potential_cause: The likely technical reason for the failure found in the log differences.
 
 Logs to analyze:
 ${logs}`;
 
     const response = await ai.generate({
-      // Using Llama 3.3 70B on Groq for high performance and low cost
       model: 'groq/llama-3.3-70b-versatile',
       prompt: promptText,
       config: {
-        temperature: 0.1,
+        temperature: 0.1, // High precision
       },
       output: {
         format: 'json',
@@ -62,7 +66,6 @@ ${logs}`;
 
   } catch (error: any) {
     console.error('[ANALYSIS_FLOW_ERROR]', error);
-    // Return a descriptive error to the UI
     throw new Error(error.message || 'Analysis failed due to an internal AI error.');
   }
 }
