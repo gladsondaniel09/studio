@@ -8,9 +8,9 @@ import {
 } from '@/lib/types';
 
 /**
- * @fileOverview A forensic flow to analyze audit logs line-by-line and generate a replication script.
+ * @fileOverview A forensic flow to analyze Taomish Xceler CTRM audit logs and reconstruct the trade lifecycle.
  * 
- * - analyzeLogIncident - Reconstructs the exact sequence of events using difference_list and payload data.
+ * - analyzeLogIncident - Reconstructs the complete trade lifecycle in chronological order using forensic analysis.
  */
 
 export async function analyzeLogIncident(
@@ -23,39 +23,293 @@ export async function analyzeLogIncident(
 
     // Limit log size to prevent token limit issues
     const logs =
-      input.logs.length > 15000
-        ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
+      input.logs.length > 20000
+        ? input.logs.slice(0, 20000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const promptText = `You are a forensic Xceler CTRM systems analyst. Your task is to provide a granular, chronological breakdown of the trade lifecycle from these audit logs.
+    const promptText = `
+You are a senior forensic analyst for Taomish Xceler CTRM platform.
 
-CRITICAL ANALYSIS GUIDELINES:
-1. Examine EVERY log entry's 'differences' (from difference_list) and 'payload'.
-2. For the 'lifecycle_breakdown' field, you MUST identify:
-   - WHAT record/event was created or updated.
-   - WHAT fields/data were modified (extract exact technical values: MT quantities, Trade IDs, BL Numbers, Vessel Names).
-   - PLANNING actions: Specify if it is a "Vessel Plan" or another type (Container, Road, etc.).
-   - ACTUALIZATION: Capture BL Dates, quantities, and status changes.
-   - PRICING: Identify Price Fixation vs. Allocation events.
-   - INVOICING: Note creation, regeneration, and POSTING events.
-   - WORKFLOW: Note any status changes (Draft -> Confirmed, etc.).
+You are analyzing ENTITY AUDIT LOGS.
 
-3. For each step in the 'lifecycle_breakdown', mention:
-   - Exactly what happened.
-   - The timestamp from the log.
-   - The impact on the trade status or accounting flow.
+These logs typically contain:
 
-4. Generate forensic 'steps_to_replicate' for a non-production environment.
+- created_timestamp
+- action
+- entity_name
+- entity_id
+- parent_id
+- table_name
+- payload
+- updated_by
+- created_by
+- tenant_id
 
-JSON Output Schema:
-- title: Concise issue title.
-- summary: Brief business scenario summary.
-- lifecycle_breakdown: Array of { timestamp, event_name, module, description, impact }.
-- steps_to_replicate: Array of replication steps.
-- observed_behavior: Description of the discrepancy.
-- potential_cause: Root technical cause.
+IMPORTANT:
+These are NOT infrastructure logs.
 
-Logs to analyze:
+Do NOT expect:
+- API gateway logs
+- retry logs
+- correlation traces
+- server logs
+- microservice debug logs
+
+Focus ONLY on available audit data.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Reconstruct the COMPLETE trade lifecycle in chronological order.
+
+Identify:
+
+1. Trade creation
+2. Trade updates
+3. Approval workflow creation/update
+4. Planning creation
+5. Planning updates
+6. Actualization events
+7. Pricing events
+8. Documentation events
+9. Invoice events
+10. Posting events
+11. Settlement events
+12. Trade closure events
+
+==================================================
+HOW TO INTERPRET LOGS
+==================================================
+
+Use:
+
+created_timestamp → event sequence
+
+action:
+- Create
+- Update
+- Delete
+
+entity_name:
+Examples:
+- PhysicalTrade
+- PlannedObligation
+- Invoice
+- Pricing
+- Workflow
+- Actualization
+- Shipment
+- BL
+- Settlement
+
+table_name:
+Use this to identify service/module
+
+Examples:
+xceler_physicaltradeservice → Trade module
+xceler_tradeplanningservice → Planning module
+xceler_invoiceservice → Invoice module
+
+==================================================
+TRADE CREATION ANALYSIS
+==================================================
+
+If entity_name = PhysicalTrade
+
+Extract:
+
+- tradeId
+- quantity
+- commodity
+- tradeType
+- priceType
+- tradePrice
+- incoterm
+- counterparty
+- delivery schedule
+- modeOfTransport
+- tradeApprovalStatus
+- tradeTransactionType
+
+Identify initial trade creation details.
+
+==================================================
+TRADE UPDATE ANALYSIS
+==================================================
+
+If action = Update:
+
+Read payload.differences
+
+For every difference:
+
+Extract:
+
+- field changed
+- old value
+- new value
+
+Example:
+
+delivery date changed
+quantity changed
+pricing changed
+status changed
+
+Clearly explain business impact.
+
+==================================================
+PLANNING ANALYSIS
+==================================================
+
+If entity_name = PlannedObligation
+
+Identify:
+
+- planned obligation creation
+- planning updates
+- planning cancellations
+
+Determine planning type using:
+
+modeOfTransport:
+- Ocean → Vessel Planning
+- Road → Truck Planning
+- Rail → Rail Planning
+- Pipeline → Pipeline Planning
+- Container → Container Planning
+
+Extract:
+
+- planned quantity
+- shipment month
+- balance quantity
+- planned obligation status
+
+==================================================
+ACTUALIZATION ANALYSIS
+==================================================
+
+Identify:
+
+- BL creation
+- actual quantity updates
+- shipment completion
+- discharge completion
+
+Extract:
+
+- BL number
+- BL date
+- actual quantity
+
+==================================================
+PRICING ANALYSIS
+==================================================
+
+Identify:
+
+- price fixation
+- provisional pricing
+- final pricing
+- pricing updates
+
+==================================================
+INVOICE ANALYSIS
+==================================================
+
+Identify:
+
+- invoice creation
+- invoice regeneration
+- invoice posting
+- duplicate invoices
+
+==================================================
+SETTLEMENT / POSTING ANALYSIS
+==================================================
+
+Identify:
+
+- settlement creation
+- posting completion
+- financial closure
+
+==================================================
+MISSING EVENT DETECTION
+==================================================
+
+If expected lifecycle stages are missing:
+
+Example:
+
+Trade created
+→ Planning created
+→ BUT no invoice found
+
+Output:
+
+EXPECTED EVENT MISSING: Invoice creation not found
+
+==================================================
+PARENT CHILD RELATIONSHIP ANALYSIS
+==================================================
+
+Use:
+
+entity_id
+parent_id
+tradeUuid
+tradeId
+plannedObligationId
+
+to connect records across lifecycle stages.
+
+==================================================
+FINAL OUTPUT FORMAT
+==================================================
+
+Return JSON:
+
+title
+
+summary
+
+lifecycle_breakdown:
+[
+ {
+   timestamp,
+   lifecycle_phase,
+   entity_name,
+   action,
+   description,
+   changed_fields,
+   business_impact
+ }
+]
+
+steps_to_replicate
+
+observed_behavior
+
+expected_behavior
+
+potential_cause
+
+recommended_fix
+
+final_trade_state
+
+==================================================
+CRITICAL RULE
+==================================================
+
+Do NOT hallucinate missing system logs.
+
+Only use actual audit log evidence.
+
+Logs:
 ${logs}`;
 
     const response = await ai.generate({

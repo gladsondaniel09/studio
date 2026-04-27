@@ -8,7 +8,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -517,42 +517,60 @@ const processAuditData = (events: any[]): any[] => {
 
 const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) => {
     return (
-        <Card className="mt-4">
-            <CardHeader>
+        <Card className="mt-4 border-primary/20 shadow-md">
+            <CardHeader className="bg-primary/5 rounded-t-lg border-b">
                 <CardTitle className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Info className="w-5 h-5 text-primary" />
+                    <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                        <ShieldCheck className="w-6 h-6 text-primary" />
                     </span>
-                    <span className="flex-grow">{result.title}</span>
+                    <div className="space-y-1">
+                        <span className="text-xl font-headline block">{result.title}</span>
+                        <CardDescription className="text-sm font-medium text-foreground/70">
+                            {result.summary}
+                        </CardDescription>
+                    </div>
                 </CardTitle>
-                <CardDescription className="pl-11">
-                    {result.summary}
-                </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-8 text-sm pl-11">
+            <CardContent className="space-y-8 p-6">
                 {/* Lifecycle Breakdown Section */}
                 {result.lifecycle_breakdown && (
                   <div>
-                    <h4 className="font-bold text-base flex items-center gap-2 mb-4">
+                    <h4 className="font-bold text-lg flex items-center gap-2 mb-6">
                         <Layers className="w-5 h-5 text-primary" />
-                        Forensic Lifecycle Breakdown
+                        Forensic Lifecycle Reconstruction
                     </h4>
-                    <div className="space-y-4 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1px] before:bg-border">
+                    <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1px] before:bg-border">
                         {result.lifecycle_breakdown.map((step, i) => (
                             <div key={i} className="relative pl-8">
                                 <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-background border-2 border-primary flex items-center justify-center z-10">
                                     <div className="w-2 h-2 rounded-full bg-primary" />
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-border/50">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{step.timestamp}</span>
-                                        <span className="font-bold text-foreground">{step.event_name}</span>
-                                        <span className="text-[10px] uppercase tracking-wider text-primary font-bold bg-primary/5 px-2 py-0.5 rounded-full border border-primary/20">{step.module}</span>
+                                        <span className="font-mono text-[10px] bg-background border px-2 py-0.5 rounded shadow-sm text-muted-foreground">{step.timestamp}</span>
+                                        <span className="text-[10px] uppercase tracking-wider text-primary font-black bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">{step.lifecycle_phase}</span>
+                                        <span className="font-bold text-foreground text-sm">{step.entity_name}</span>
+                                        <span className={cn(
+                                            "text-[10px] font-bold px-1.5 py-0.5 rounded border",
+                                            step.action.toLowerCase().includes('create') ? "bg-green-50 text-green-700 border-green-200" :
+                                            step.action.toLowerCase().includes('update') ? "bg-blue-50 text-blue-700 border-blue-200" :
+                                            "bg-red-50 text-red-700 border-red-200"
+                                        )}>
+                                            {step.action}
+                                        </span>
                                     </div>
-                                    <p className="text-muted-foreground leading-relaxed italic">{step.description}</p>
-                                    <div className="text-[11px] flex items-start gap-1 text-primary">
-                                        <ArrowRight className="w-3 h-3 mt-0.5 shrink-0" />
-                                        <span className="font-medium">Impact: {step.impact}</span>
+                                    <p className="text-sm font-medium leading-relaxed">{step.description}</p>
+                                    <div className="flex flex-col gap-1">
+                                        {step.changed_fields && (
+                                            <div className="text-[11px] text-muted-foreground bg-background/50 p-1.5 rounded border border-dashed">
+                                                <span className="font-bold">Technical Deltas:</span> {typeof step.changed_fields === 'string' ? step.changed_fields : JSON.stringify(step.changed_fields)}
+                                            </div>
+                                        )}
+                                        <div className="text-[11px] flex items-start gap-1 text-primary">
+                                            <ArrowRight className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                            <span className="font-bold uppercase tracking-tight">Business Impact:</span>
+                                            <span className="font-medium italic">{step.business_impact}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -561,39 +579,68 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                   </div>
                 )}
 
-                <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-2">
-                        <ListOrdered className="w-4 h-4 text-muted-foreground" />
-                        Steps to Replicate
-                    </h4>
-                    <ol className="list-decimal list-outside pl-5 space-y-1.5 marker:text-muted-foreground">
-                        {result.steps_to_replicate.map((step, i) => <li key={i} className="pl-2">{step}</li>)}
-                    </ol>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                        <div className="bg-card p-4 rounded-lg border shadow-sm h-full">
+                            <h4 className="font-bold flex items-center gap-2 mb-3 text-primary uppercase text-xs tracking-widest">
+                                <ListOrdered className="w-4 h-4" />
+                                Replication Protocol
+                            </h4>
+                            <ol className="list-decimal list-outside pl-5 space-y-2 marker:text-primary marker:font-bold text-sm">
+                                {result.steps_to_replicate.map((step, i) => <li key={i} className="pl-1">{step}</li>)}
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div className="bg-destructive/5 border border-destructive/20 p-4 rounded-lg h-full">
+                            <h4 className="font-bold flex items-center gap-2 mb-2 text-destructive uppercase text-xs tracking-widest">
+                                <AlertCircle className="w-4 h-4" />
+                                Observed Anomaly
+                            </h4>
+                            <p className="text-sm leading-relaxed">{result.observed_behavior}</p>
+                            
+                            <h4 className="font-bold flex items-center gap-2 mt-4 mb-2 text-green-600 uppercase text-xs tracking-widest">
+                                <CheckCircle2 className="w-4 h-4" />
+                                Expected Behavior
+                            </h4>
+                            <p className="text-sm leading-relaxed">{result.expected_behavior}</p>
+                        </div>
+                    </div>
                 </div>
-                <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-2">
-                        <AlertCircle className="w-4 h-4 text-muted-foreground" />
-                        Observed Behavior
-                    </h4>
-                    <p className="bg-destructive/5 p-3 rounded-lg border border-destructive/20">{result.observed_behavior}</p>
-                </div>
-                <div>
-                    <h4 className="font-semibold flex items-center gap-2 mb-2">
-                       <TestTube2 className="w-4 h-4 text-muted-foreground" />
-                        Potential Cause
-                    </h4>
-                    <p className="font-mono bg-muted p-3 rounded-lg text-xs leading-relaxed border">{result.potential_cause}</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-muted/50 p-4 rounded-lg border">
+                         <h4 className="font-bold flex items-center gap-2 mb-2 text-foreground uppercase text-xs tracking-widest">
+                            <TestTube2 className="w-4 h-4" />
+                            Root Cause Hypothesis
+                        </h4>
+                        <p className="text-sm font-mono bg-background p-3 rounded border shadow-inner leading-relaxed whitespace-pre-wrap">{result.potential_cause}</p>
+                    </div>
+                    
+                    <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+                         <h4 className="font-bold flex items-center gap-2 mb-2 text-primary uppercase text-xs tracking-widest">
+                            <Sparkles className="w-4 h-4" />
+                            Recommended Remediation
+                        </h4>
+                        <p className="text-sm leading-relaxed">{result.recommended_fix}</p>
+                        
+                        <div className="mt-4 pt-4 border-t border-primary/20">
+                            <h4 className="font-bold text-[10px] uppercase text-muted-foreground tracking-widest mb-1">Final Trade State</h4>
+                            <span className="text-xs font-mono font-bold bg-primary/10 px-2 py-1 rounded text-primary border border-primary/20">{result.final_trade_state}</span>
+                        </div>
+                    </div>
                 </div>
 
                 <Accordion type="single" collapsible className="w-full pt-4">
-                    <AccordionItem value="raw-json">
-                        <AccordionTrigger>
-                            <div className="flex items-center gap-2">
-                                <Code className="h-4 w-4" /> View Raw JSON Response
+                    <AccordionItem value="raw-json" className="border-none">
+                        <AccordionTrigger className="hover:no-underline bg-muted/30 px-4 py-2 rounded-t-lg">
+                            <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-widest font-bold">
+                                <Code className="h-3.5 w-3.5" /> Full AI Metadata Trace
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent>
-                           <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Response" />
+                        <AccordionContent className="bg-muted/30 px-4 pb-4 rounded-b-lg">
+                           <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Reconstruction Data" />
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
@@ -883,6 +930,9 @@ export default function AuditTimeline() {
                 timestamp: e.created_timestamp,
                 action: e.action,
                 entity: e.entity_name,
+                entity_id: e.entity_id,
+                parent_id: e.parent_id,
+                table_name: e.table_name,
                 user: e.user?.name,
                 payload: e.payload !== 'NULL' ? e.payload : undefined,
                 differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
@@ -1074,15 +1124,18 @@ export default function AuditTimeline() {
             onClose={() => setShowTimelineWalkthrough(false)}
           />}
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
-                <DialogContent className="max-w-4xl">
+                <DialogContent className="max-w-5xl h-[90vh]">
                     <DialogHeader><DialogTitle>Forensic Trade Lifecycle Analysis</DialogTitle></DialogHeader>
-                    <div className="relative max-h-[85vh]">
+                    <div className="relative flex-1 min-h-0">
                          <ScrollArea className="h-full w-full">
-                            <div className="py-4">
+                            <div className="py-4 pr-4">
                                 {isAnalyzing && (
-                                    <div className="flex flex-col items-center justify-center gap-4 p-8">
-                                        <Loader className="w-10 h-10 animate-spin text-primary" />
-                                        <p className="text-muted-foreground">Performing forensic reconstruction... Analyzing data payloads and state changes.</p>
+                                    <div className="flex flex-col items-center justify-center gap-4 p-12">
+                                        <Loader className="w-12 h-12 animate-spin text-primary" />
+                                        <div className="text-center space-y-2">
+                                            <p className="font-bold text-lg">Forensic Reconstruction in Progress...</p>
+                                            <p className="text-muted-foreground text-sm max-w-md">Scanning audit logs, mapping entity relationships, and calculating field-level business impacts.</p>
+                                        </div>
                                     </div>
                                 )}
                                 {analysisResult && <AnalysisResultDisplay result={analysisResult} />}
@@ -1093,15 +1146,18 @@ export default function AuditTimeline() {
             </Dialog>
 
             <Dialog open={showReplicateDialog} onOpenChange={setShowReplicateDialog}>
-                <DialogContent className="max-w-3xl">
+                <DialogContent className="max-w-3xl h-[80vh]">
                     <DialogHeader><DialogTitle>High-Fidelity Replication Script</DialogTitle></DialogHeader>
-                    <div className="relative max-h-[80vh]">
+                    <div className="relative flex-1 min-h-0">
                          <ScrollArea className="h-full w-full">
-                            <div className="py-4">
+                            <div className="py-4 pr-4">
                                 {isReplicating && (
-                                    <div className="flex flex-col items-center justify-center gap-4 p-8">
-                                        <Loader className="w-10 h-10 animate-spin text-primary" />
-                                        <p className="text-muted-foreground">Generating replication process... Using business domain logic.</p>
+                                    <div className="flex flex-col items-center justify-center gap-4 p-12">
+                                        <Loader className="w-12 h-12 animate-spin text-primary" />
+                                        <div className="text-center space-y-2">
+                                            <p className="font-bold text-lg text-primary">Building Reproduction Guide...</p>
+                                            <p className="text-muted-foreground text-sm">Synthesizing log sequences into Xceler business workflows.</p>
+                                        </div>
                                     </div>
                                 )}
                                 {replicationResult && <ReplicationResultDisplay result={replicationResult} />}
@@ -1124,9 +1180,9 @@ export default function AuditTimeline() {
                <div className="flex-shrink-0 flex items-center gap-2">
                   {dataType === 'audit' && (
                     <div className="flex items-center gap-2">
-                        <Button onClick={handleAnalyze} disabled={isAnalyzing}>
+                        <Button onClick={handleAnalyze} disabled={isAnalyzing} className="shadow-lg shadow-primary/20">
                             {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
-                            Analyse
+                            Forensic Analyse
                         </Button>
                         <Button variant="outline" onClick={handleReplicate} disabled={isReplicating}>
                             {isReplicating ? <Loader className="mr-2 animate-spin" /> : <TestTube2 className="mr-2 h-4 w-4" />}
@@ -1160,7 +1216,6 @@ export default function AuditTimeline() {
                             {sortOrder === 'desc' ? <ArrowDown className="mr-2 h-4 w-4" /> : <ArrowUp className="mr-2 h-4 w-4" />}
                             Sort {sortOrder === 'desc' ? 'Desc' : 'Asc'}
                         </Button>
-                        <Button variant='outline' className="w-full sm:w-auto" disabled><Wand2 className="mr-2 h-4 w-4" />Magic Sort</Button>
                     </>
                 )}
                 <div className="flex-grow"></div>

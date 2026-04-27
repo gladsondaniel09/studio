@@ -41,14 +41,19 @@ export const IncidentAnalysisOutputSchema = z.object({
     summary: z.string().describe("A brief summary of the problem."),
     lifecycle_breakdown: z.array(z.object({
         timestamp: z.string().describe("Timestamp from log."),
-        event_name: z.string().describe("Action performed (e.g. Physical Trade Created)."),
-        module: z.string().describe("Xceler module (e.g. physical trade, vessel planning)."),
-        description: z.string().describe("Forensic detail of data changes, IDs, and values."),
-        impact: z.string().describe("Impact on trade lifecycle or status.")
+        lifecycle_phase: z.string().describe("The phase of the trade lifecycle (e.g. Planning, Actualization)."),
+        entity_name: z.string().describe("The name of the entity involved."),
+        action: z.string().describe("The action performed (Create, Update, Delete)."),
+        description: z.string().describe("Forensic detail of what happened."),
+        changed_fields: z.any().optional().describe("Details of fields that were updated."),
+        business_impact: z.string().describe("The impact this event has on the trade or accounting flow.")
     })).describe("Detailed chronological breakdown of the trade lifecycle."),
     steps_to_replicate: z.array(z.string()).describe("A list of steps to replicate the issue."),
-    observed_behavior: z.string().describe("A description of the incorrect behavior that was observed."),
+    observed_behavior: z.string().describe("Description of the incorrect behavior observed."),
+    expected_behavior: z.string().describe("Description of the behavior that was expected but didn't happen."),
     potential_cause: z.string().describe("The likely technical cause of the issue."),
+    recommended_fix: z.string().describe("Recommended steps to fix the issue."),
+    final_trade_state: z.string().describe("The state the trade is left in at the end of the logs."),
 });
 export type IncidentAnalysisOutput = z.infer<typeof IncidentAnalysisOutputSchema>;
 
