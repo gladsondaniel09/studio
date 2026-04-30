@@ -1,13 +1,13 @@
 
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import DataGrid, { Column } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Button } from './ui/button';
-import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc } from 'lucide-react';
+import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { renderDetails } from './audit-timeline';
 import { Input } from './ui/input';
@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Checkbox } from './ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 type GenericRow = { [key: string]: any };
 
@@ -62,6 +63,10 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
   
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   // Custom Filter Dropdown Header
   const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
     const columnKey = column.key;
@@ -187,6 +192,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                   <Checkbox 
                     checked={selected.length === uniqueValues.length} 
                     className="h-3.5 w-3.5"
+                    onCheckedChange={() => {}} // Controlled manually via div click
                   />
                   <label className="text-[11px] font-medium leading-none cursor-pointer truncate">
                     (Select All)
@@ -210,8 +216,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
               </div>
             </ScrollArea>
             <div className="p-2 bg-muted/30 flex justify-end gap-2 border-t">
-               <Button variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => {}}>Cancel</Button>
-               <Button size="sm" className="h-7 text-[10px]" onClick={() => {}}>OK</Button>
+               <Button size="sm" className="h-7 text-[10px]" onClick={() => {}}>Done</Button>
             </div>
           </PopoverContent>
         </Popover>
@@ -220,39 +225,10 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   }, [data, filters, sortConfig]);
 
   // Initial Columns Configuration
-  const [columns, setColumns] = useState<readonly Column<any>[]>(() => {
-    const baseColumns: Column<any>[] = [
-      {
-        key: 'expand',
-        name: '',
-        minWidth: 40,
-        width: 40,
-        resizable: false,
-        frozen: true,
-        renderCell: ({ row }) => (
-          <div className="flex items-center justify-center h-full">
-            <ExpandedRow row={row} />
-          </div>
-        ),
-      },
-      ...propColumns.map(col => ({
-        key: col.key,
-        name: col.name,
-        resizable: true,
-        draggable: true,
-        renderCell: ({ row }: { row: any }) => (
-          <div className="truncate whitespace-nowrap px-2 text-xs">
-            {String(row[col.key] ?? '')}
-          </div>
-        ),
-        renderHeaderCell: (props: any) => <FilterHeader column={props.column} />
-      }))
-    ];
-    return baseColumns;
-  });
+  const [columns, setColumns] = useState<readonly Column<any>[]>([]);
 
   // Sync columns on prop change
-  React.useEffect(() => {
+  useEffect(() => {
     const nextColumns: Column<any>[] = [
       {
         key: 'expand',
@@ -310,6 +286,18 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     return filtered;
   }, [data, filters, sortConfig]);
 
+  // Pagination Logic
+  const totalPages = Math.ceil(processedRows.length / pageSize);
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return processedRows.slice(start, start + pageSize);
+  }, [processedRows, currentPage, pageSize]);
+
+  // Reset to first page when data/filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [processedRows.length, pageSize]);
+
   const handleColumnsChange = useCallback((newColumns: readonly Column<any>[]) => {
     setColumns(newColumns);
   }, []);
@@ -320,7 +308,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         <DataGrid
           rowKeyGetter={rowKeyGetter}
           columns={columns}
-          rows={processedRows}
+          rows={pagedRows}
           onColumnsChange={handleColumnsChange}
           headerRowHeight={45}
           className="rdg-light h-full border-none"
@@ -329,7 +317,10 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
       </div>
       <div className="p-2 border-t bg-muted/30 text-[10px] text-muted-foreground flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4">
-          <div>Showing {processedRows.length} of {data.length} records</div>
+          <div>
+            Showing {processedRows.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-
+            {Math.min(currentPage * pageSize, processedRows.length)} of {processedRows.length} records
+          </div>
           {(Object.keys(filters).length > 0 || sortConfig.columnKey) && (
             <Button 
               variant="link" 
@@ -344,7 +335,70 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
             </Button>
           )}
         </div>
-        <div className="flex gap-2">
+
+        {/* Pagination Controls */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="whitespace-nowrap">Rows per page:</span>
+            <Select 
+              value={String(pageSize)} 
+              onValueChange={(val) => setPageSize(Number(val))}
+            >
+              <SelectTrigger className="h-6 w-16 text-[10px] px-1">
+                <SelectValue placeholder={pageSize} />
+              </SelectTrigger>
+              <SelectContent>
+                {[20, 50, 100, 200].map(size => (
+                  <SelectItem key={size} value={String(size)} className="text-[10px]">{size}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6" 
+              onClick={() => setCurrentPage(1)} 
+              disabled={currentPage === 1}
+            >
+              <ChevronsLeft className="h-3 w-3" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6" 
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} 
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </Button>
+            
+            <span className="mx-2 whitespace-nowrap">Page {currentPage} of {totalPages || 1}</span>
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6" 
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} 
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              <ChevronRight className="h-3 w-3" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6" 
+              onClick={() => setCurrentPage(totalPages)} 
+              disabled={currentPage === totalPages || totalPages === 0}
+            >
+              <ChevronsRight className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex gap-2 text-right">
           <span>• Drag headers to rearrange</span>
           <span>• Click filter icon to sort & refine</span>
         </div>
