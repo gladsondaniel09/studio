@@ -30,8 +30,17 @@ interface SortConfig {
   direction: 'ASC' | 'DESC' | null;
 }
 
+/**
+ * Returns a stable unique identifier for a row.
+ */
 function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
-  return (row as any).id || (row as any).uuid || (row as any).created_timestamp || (row as any).entity_id || Math.random().toString();
+  return (row as any).id || 
+         (row as any).uuid || 
+         (row as any).created_timestamp || 
+         (row as any).entity_id || 
+         (row as any).tradeId || 
+         (row as any).TradeId || 
+         (row as any).PlannedObligationId;
 }
 
 const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
@@ -48,7 +57,7 @@ const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
           <div className="p-6">
             <DialogHeader className="pb-4">
               <DialogTitle>
-                {isAuditEvent ? `${row.action} on ${row.entity_name}` : 'Row Details'}
+                {isAuditEvent ? `${(row as ProcessedAuditEvent).action} on ${(row as ProcessedAuditEvent).entity_name}` : 'Row Details'}
               </DialogTitle>
             </DialogHeader>
             {isAuditEvent ? renderDetails(row as ProcessedAuditEvent) : renderDetails(row as any)}
@@ -304,8 +313,19 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   }, []);
 
   const handleRowClick = useCallback((row: any) => {
-    setSelectedRow(prev => prev === row ? null : row);
+    setSelectedRow(prev => {
+      if (!prev || !row) return row;
+      const prevKey = rowKeyGetter(prev);
+      const currentKey = rowKeyGetter(row);
+      // Toggle if clicking the same row
+      return prevKey === currentKey ? null : row;
+    });
   }, []);
+
+  const isRowSelected = (row: any) => {
+    if (!selectedRow || !row) return false;
+    return rowKeyGetter(selectedRow) === rowKeyGetter(row);
+  };
 
   return (
     <div className="border rounded-md overflow-hidden bg-card h-full shadow-sm flex flex-col relative">
@@ -319,7 +339,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           onRowClick={handleRowClick}
           rowClass={(row) => cn(
             "cursor-pointer transition-colors",
-            row === selectedRow ? "bg-primary/5 font-medium" : "hover:bg-muted/30"
+            isRowSelected(row) ? "bg-primary/10 font-medium" : "hover:bg-muted/30"
           )}
           className="rdg-light h-full border-none"
           style={{ height: '100%' }}
@@ -346,14 +366,16 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           </div>
           <div className="flex-1 min-h-0 p-4 overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+              {/* Show Payload if it exists */}
               {selectedRow.payload && selectedRow.payload !== 'NULL' ? (
                 <RawJsonViewer jsonString={selectedRow.payload} title="Payload Data" />
-              ) : (!selectedRow.difference_list || selectedRow.difference_list === 'NULL') ? (
-                <div className="col-span-full h-full">
+              ) : (
+                <div className={cn("h-full", (selectedRow.difference_list && selectedRow.difference_list !== 'NULL') ? "" : "col-span-full")}>
                   <RawJsonViewer jsonString={JSON.stringify(selectedRow, null, 2)} title="Raw Record Metadata" />
                 </div>
-              ) : null}
+              )}
 
+              {/* Show Difference List if it exists */}
               {selectedRow.difference_list && selectedRow.difference_list !== 'NULL' && (
                 <RawJsonViewer jsonString={selectedRow.difference_list} title="Difference List" />
               )}
