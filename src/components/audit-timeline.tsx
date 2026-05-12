@@ -8,7 +8,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -676,6 +676,10 @@ export default function AuditTimeline() {
   const [replicationResult, setReplicationResult] = useState<ReplicationOutput | null>(null);
   const [showReplicateDialog, setShowReplicateDialog] = useState(false);
 
+  // For controlled event expansion with navigation
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isEventDetailsOpen, setIsEventDetailsOpen] = useState(false);
+
   useEffect(() => {
     const hasSeenUpload = localStorage.getItem('hasSeenUploadWalkthrough');
     if (!hasSeenUpload) {
@@ -840,6 +844,8 @@ export default function AuditTimeline() {
     setSelectedFlowEntities(null);
     setAnalysisResult(null);
     setReplicationResult(null);
+    setExpandedIndex(null);
+    setIsEventDetailsOpen(false);
   }
   
   const handleStageClick = (entities: string[]) => {
@@ -1049,7 +1055,17 @@ export default function AuditTimeline() {
     document.body.removeChild(link);
   }
 
+  const navigateDetails = (direction: 'next' | 'prev') => {
+      if (expandedIndex === null) return;
+      const newIndex = direction === 'next' ? expandedIndex + 1 : expandedIndex - 1;
+      if (newIndex >= 0 && newIndex < filteredData.length) {
+          setExpandedIndex(newIndex);
+      }
+  };
+
   if (view === 'timeline') {
+    const currentExpandedEvent = expandedIndex !== null ? filteredData[expandedIndex] : null;
+
     return (
       <div className='flex flex-col h-screen w-full'>
           {dataType === 'audit' && <Walkthrough
@@ -1097,6 +1113,49 @@ export default function AuditTimeline() {
                                 {replicationResult && <ReplicationResultDisplay result={replicationResult} />}
                             </div>
                         </ScrollArea>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Global Forensic Detail Modal with Navigation */}
+            <Dialog open={isEventDetailsOpen} onOpenChange={setIsEventDetailsOpen}>
+                 <DialogContent className="max-w-4xl p-0">
+                    <div className="max-h-[90vh] overflow-hidden flex flex-col">
+                      <DialogHeader className="p-6 pb-4 shrink-0 flex flex-row items-center justify-between border-b">
+                        <div>
+                            <DialogTitle className="text-xl font-headline">
+                                {currentExpandedEvent ? `${currentExpandedEvent.action} on ${currentExpandedEvent.entity_name}` : 'Event Details'}
+                            </DialogTitle>
+                            <p className="text-xs text-muted-foreground font-medium mt-1">
+                                {expandedIndex !== null ? `Record ${expandedIndex + 1} of ${filteredData.length}` : ''}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 pr-8">
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 gap-1" 
+                                disabled={expandedIndex === 0}
+                                onClick={() => navigateDetails('prev')}
+                            >
+                                <ChevronLeft className="h-4 w-4" /> Previous
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 gap-1" 
+                                disabled={expandedIndex === filteredData.length - 1}
+                                onClick={() => navigateDetails('next')}
+                            >
+                                Next <ChevronRight className="h-4 w-4" />
+                            </Button>
+                        </div>
+                      </DialogHeader>
+                      <ScrollArea className="flex-grow min-h-0">
+                        <div className="px-6 pb-6 pt-4">
+                            {currentExpandedEvent && renderDetails(currentExpandedEvent)}
+                        </div>
+                      </ScrollArea>
                     </div>
                 </DialogContent>
             </Dialog>
@@ -1199,21 +1258,16 @@ export default function AuditTimeline() {
                                     <h3 className="vertical-timeline-element-title text-lg font-bold text-left font-headline">{action}</h3>
                                     <h4 className="vertical-timeline-element-subtitle text-muted-foreground text-left">{entity_name}</h4>
                                 </div>
-                                <Dialog>
-                                    <DialogTrigger asChild><Button variant="ghost" size="icon"><Maximize className="h-4 w-4" /></Button></DialogTrigger>
-                                     <DialogContent className="max-w-4xl p-0">
-                                        <div className="max-h-[90vh] overflow-hidden flex flex-col">
-                                          <DialogHeader className="p-6 pb-4 shrink-0">
-                                            <DialogTitle>{action} on {entity_name}</DialogTitle>
-                                          </DialogHeader>
-                                          <ScrollArea className="flex-grow min-h-0">
-                                            <div className="px-6 pb-6">
-                                                {renderDetails(event)}
-                                            </div>
-                                          </ScrollArea>
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => {
+                                        setExpandedIndex(index);
+                                        setIsEventDetailsOpen(true);
+                                    }}
+                                >
+                                    <Maximize className="h-4 w-4" />
+                                </Button>
                             </div>
                             {renderPreview(event)}
                         </VerticalTimelineElement>

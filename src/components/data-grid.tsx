@@ -43,31 +43,6 @@ function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
          (row as any).PlannedObligationId;
 }
 
-const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
-  const isAuditEvent = 'created_timestamp' in row;
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => e.stopPropagation()}>
-          <Maximize className="h-3 w-3" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-4xl p-0">
-        <ScrollArea className="max-h-[90vh]">
-          <div className="p-6">
-            <DialogHeader className="pb-4">
-              <DialogTitle>
-                {isAuditEvent ? `${(row as ProcessedAuditEvent).action} on ${(row as ProcessedAuditEvent).entity_name}` : 'Row Details'}
-              </DialogTitle>
-            </DialogHeader>
-            {isAuditEvent ? renderDetails(row as ProcessedAuditEvent) : renderDetails(row as any)}
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
@@ -76,6 +51,10 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  // Modal Navigation State
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   // Custom Filter Dropdown Header
   const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
@@ -234,41 +213,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     );
   }, [data, filters, sortConfig]);
 
-  // Initial Columns Configuration
-  const [columns, setColumns] = useState<readonly Column<any>[]>([]);
-
-  // Sync columns on prop change
-  useEffect(() => {
-    const nextColumns: Column<any>[] = [
-      {
-        key: 'expand',
-        name: '',
-        minWidth: 40,
-        width: 40,
-        resizable: false,
-        frozen: true,
-        renderCell: ({ row }) => (
-          <div className="flex items-center justify-center h-full">
-            <ExpandedRow row={row} />
-          </div>
-        ),
-      },
-      ...propColumns.map(col => ({
-        key: col.key,
-        name: col.name,
-        resizable: true,
-        draggable: true,
-        renderCell: ({ row }: { row: any }) => (
-          <div className="truncate whitespace-nowrap px-2 text-xs">
-            {String(row[col.key] ?? '')}
-          </div>
-        ),
-        renderHeaderCell: (props: any) => <FilterHeader column={props.column} />
-      }))
-    ];
-    setColumns(nextColumns);
-  }, [propColumns, FilterHeader]);
-
   // Apply Filters and Sorting to Data
   const processedRows = useMemo(() => {
     let filtered = data.filter(row => {
@@ -296,6 +240,49 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     return filtered;
   }, [data, filters, sortConfig]);
 
+  // Sync columns on prop change
+  const columns = useMemo((): Column<any>[] => {
+    return [
+      {
+        key: 'expand',
+        name: '',
+        minWidth: 40,
+        width: 40,
+        resizable: false,
+        frozen: true,
+        renderCell: ({ row, rowIdx }) => (
+          <div className="flex items-center justify-center h-full">
+             <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-6 w-6" 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    const globalIdx = (currentPage - 1) * pageSize + rowIdx;
+                    setExpandedIndex(globalIdx);
+                    setIsDetailsOpen(true);
+                }}
+             >
+                <Maximize className="h-3 w-3" />
+            </Button>
+          </div>
+        ),
+      },
+      ...propColumns.map(col => ({
+        key: col.key,
+        name: col.name,
+        resizable: true,
+        draggable: true,
+        renderCell: ({ row }: { row: any }) => (
+          <div className="truncate whitespace-nowrap px-2 text-xs">
+            {String(row[col.key] ?? '')}
+          </div>
+        ),
+        renderHeaderCell: (props: any) => <FilterHeader column={props.column} />
+      }))
+    ];
+  }, [propColumns, FilterHeader, currentPage, pageSize]);
+
   // Pagination Logic
   const totalPages = Math.ceil(processedRows.length / pageSize);
   const pagedRows = useMemo(() => {
@@ -303,14 +290,21 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     return processedRows.slice(start, start + pageSize);
   }, [processedRows, currentPage, pageSize]);
 
+  // Modal Navigation
+  const navigateDetails = (direction: 'next' | 'prev') => {
+      if (expandedIndex === null) return;
+      const newIndex = direction === 'next' ? expandedIndex + 1 : expandedIndex - 1;
+      if (newIndex >= 0 && newIndex < processedRows.length) {
+          setExpandedIndex(newIndex);
+      }
+  };
+
+  const currentExpandedRow = expandedIndex !== null ? processedRows[expandedIndex] : null;
+
   // Reset to first page when data/filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [processedRows.length, pageSize]);
-
-  const handleColumnsChange = useCallback((newColumns: readonly Column<any>[]) => {
-    setColumns(newColumns);
-  }, []);
 
   const handleRowClick = useCallback((row: any) => {
     setSelectedRow(prev => {
@@ -334,7 +328,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           rowKeyGetter={rowKeyGetter}
           columns={columns}
           rows={pagedRows}
-          onColumnsChange={handleColumnsChange}
           headerRowHeight={45}
           onRowClick={handleRowClick}
           rowClass={(row) => cn(
@@ -345,6 +338,51 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           style={{ height: '100%' }}
         />
       </div>
+
+      {/* Forensic Detail Modal with Navigation */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+          <DialogContent className="max-w-4xl p-0">
+            <div className="max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader className="p-6 pb-4 shrink-0 flex flex-row items-center justify-between border-b">
+                <div>
+                    <DialogTitle className="text-xl font-headline">
+                        {currentExpandedRow && 'action' in currentExpandedRow 
+                            ? `${currentExpandedRow.action} on ${currentExpandedRow.entity_name}` 
+                            : 'Row Details'}
+                    </DialogTitle>
+                    <p className="text-xs text-muted-foreground font-medium mt-1">
+                        {expandedIndex !== null ? `Record ${expandedIndex + 1} of ${processedRows.length}` : ''}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 pr-8">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 gap-1" 
+                        disabled={expandedIndex === 0}
+                        onClick={() => navigateDetails('prev')}
+                    >
+                        <ChevronLeft className="h-4 w-4" /> Previous
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 gap-1" 
+                        disabled={expandedIndex === processedRows.length - 1}
+                        onClick={() => navigateDetails('next')}
+                    >
+                        Next <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+              </DialogHeader>
+              <ScrollArea className="flex-grow min-h-0">
+                <div className="px-6 pb-6 pt-4">
+                    {currentExpandedRow && renderDetails(currentExpandedRow as any)}
+                </div>
+              </ScrollArea>
+            </div>
+          </DialogContent>
+      </Dialog>
 
       {/* Bottom Inspection Pane */}
       {selectedRow && (
