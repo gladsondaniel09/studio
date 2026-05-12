@@ -47,12 +47,34 @@ import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
 
+// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS
+const formatTimestamp = (ts: string | undefined): string => {
+  if (!ts || ts === 'NULL') return '';
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return ts;
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    const ms = String(date.getMilliseconds()).padStart(3, '0');
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
+  } catch (e) {
+    return ts;
+  }
+};
+
 // Extend the AuditEvent type to include our pre-processed fields
 export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
     searchable_text: string;
-    business_timestamp: string;
+    business_timestamp: string; // Formatted for display
+    raw_business_time: number;   // For sorting
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -113,24 +135,26 @@ const DetailView = ({items, type}: {items: any, type: 'key-value' | 'diff'}) => 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-4 text-left">
                 {visibleItems.map((item: any, index: number) => {
                     if(type === 'diff') {
+                        const isTime = item.field?.toLowerCase().includes('timestamp');
                         return (
                              <div key={index} className="min-w-0">
                                 <p className="font-bold text-sm capitalize">{(item.label || item.field).replace(/_/g, ' ')}</p>
                                 <div className="flex flex-col text-sm">
-                                    <div className="text-muted-foreground line-through"><TruncatedValue value={item.oldValue} /></div>
+                                    <div className="text-muted-foreground line-through"><TruncatedValue value={isTime ? formatTimestamp(item.oldValue) : item.oldValue} /></div>
                                     <div className="flex items-start gap-2">
                                         <ArrowRight className="w-4 h-4 text-primary shrink-0 mt-1" />
-                                        <div className='flex-1 min-w-0'><TruncatedValue value={item.newValue} /></div>
+                                        <div className='flex-1 min-w-0'><TruncatedValue value={isTime ? formatTimestamp(item.newValue) : item.newValue} /></div>
                                     </div>
                                 </div>
                             </div>
                         )
                     }
                     const [key, value] = item;
+                    const isTime = key.toLowerCase().includes('timestamp');
                      return (
                         <div key={key} className="min-w-0">
                             <p className="font-bold text-sm capitalize">{key.replace(/_/g, ' ')}</p>
-                            <div className="min-w-0"><TruncatedValue value={value} /></div>
+                            <div className="min-w-0"><TruncatedValue value={isTime ? formatTimestamp(value) : value} /></div>
                         </div>
                     )
                 })}
@@ -187,7 +211,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, ...otherDetails } = event;
+        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, ...otherDetails } = event;
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
@@ -236,7 +260,9 @@ const renderPreview = (event: ProcessedAuditEvent) => {
                         {entries.slice(0, PREVIEW_LIMIT).map(([key, value]) => (
                              <p key={key} className="truncate">
                                 <span className="font-semibold capitalize">{key.replace(/_/g, ' ')}: </span>
-                                <span className="text-muted-foreground">{String(value)}</span>
+                                <span className="text-muted-foreground">
+                                    {key.toLowerCase().includes('timestamp') ? formatTimestamp(String(value)) : String(value)}
+                                </span>
                             </p>
                         ))}
                         {entries.length > PREVIEW_LIMIT && (
@@ -251,14 +277,17 @@ const renderPreview = (event: ProcessedAuditEvent) => {
             if (Array.isArray(parsed_difference_list) && parsed_difference_list.length > 0) {
                  return (
                     <div className="text-xs mt-2 space-y-1 text-left">
-                        {parsed_difference_list.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => (
-                             <p key={index} className="truncate min-w-0">
-                                <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
-                                <span className="text-muted-foreground line-through">{String(diff.oldValue ?? 'none')}</span>
-                                <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
-                                <span className='text-foreground'>{String(diff.newValue ?? 'none')}</span>
-                            </p>
-                        ))}
+                        {parsed_difference_list.slice(0, PREVIEW_LIMIT).map((diff: any, index: number) => {
+                             const isTime = diff.field?.toLowerCase().includes('timestamp');
+                             return (
+                                <p key={index} className="truncate min-w-0">
+                                    <span className="font-semibold capitalize">{(diff.label || diff.field).replace(/_/g, ' ')}: </span>
+                                    <span className="text-muted-foreground line-through">{isTime ? formatTimestamp(String(diff.oldValue ?? 'none')) : String(diff.oldValue ?? 'none')}</span>
+                                    <ArrowRight className="w-3 h-3 text-primary inline mx-1" />
+                                    <span className='text-foreground'>{isTime ? formatTimestamp(String(diff.newValue ?? 'none')) : String(diff.newValue ?? 'none')}</span>
+                                </p>
+                             );
+                        })}
                         {parsed_difference_list.length > PREVIEW_LIMIT && (
                             <p className="text-muted-foreground">...and {parsed_difference_list.length - PREVIEW_LIMIT} more changes.</p>
                         )}
@@ -420,7 +449,7 @@ const processAuditData = (events: any[]): any[] => {
     let parsed_payload: any = null;
     let parsed_difference_list: any = null;
     let searchable_text: string = '';
-    let business_timestamp: string = event.created_timestamp;
+    let raw_ts: string = event.created_timestamp;
 
     // Create searchable text for any object
     searchable_text = getObjectValues(event).toLowerCase();
@@ -432,11 +461,11 @@ const processAuditData = (events: any[]): any[] => {
 
             // 1. Extract Business Timestamp (Priority: payload.createdTimestamp -> payload.updatedTimestamp -> DB Timestamp)
             if (parsed_payload.createdTimestamp) {
-                business_timestamp = parsed_payload.createdTimestamp;
+                raw_ts = parsed_payload.createdTimestamp;
             } else if (parsed_payload.created_timestamp) {
-                business_timestamp = parsed_payload.created_timestamp;
+                raw_ts = parsed_payload.created_timestamp;
             } else if (parsed_payload.updatedTimestamp) {
-                business_timestamp = parsed_payload.updatedTimestamp;
+                raw_ts = parsed_payload.updatedTimestamp;
             }
 
             // 2. Taomish Specific: Differences inside payload
@@ -444,10 +473,10 @@ const processAuditData = (events: any[]): any[] => {
                 parsed_difference_list = parsed_payload.differences;
                 
                 // If we didn't find a timestamp in the root payload, check the differences array
-                if (business_timestamp === event.created_timestamp) {
+                if (raw_ts === event.created_timestamp) {
                      const tsDiff = parsed_payload.differences.find((d: any) => d.field === 'updatedTimestamp' || d.field === 'createdTimestamp');
                      if (tsDiff && tsDiff.newValue) {
-                         business_timestamp = tsDiff.newValue;
+                         raw_ts = tsDiff.newValue;
                      }
                 }
             }
@@ -465,12 +494,16 @@ const processAuditData = (events: any[]): any[] => {
         }
     }
 
+    const business_timestamp = formatTimestamp(raw_ts);
+    const raw_business_time = new Date(raw_ts).getTime() || 0;
+
     return {
       ...event,
       parsed_payload,
       parsed_difference_list,
       searchable_text,
-      business_timestamp, // High-fidelity timestamp for sorting and display
+      business_timestamp, // High-fidelity standardized timestamp for display
+      raw_business_time,   // For sorting
     };
   });
 };
@@ -507,7 +540,7 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                                 </div>
                                 <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-border/50">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono text-[10px] bg-background border px-2 py-0.5 rounded shadow-sm text-muted-foreground">{step.timestamp}</span>
+                                        <span className="font-mono text-[10px] bg-background border px-2 py-0.5 rounded shadow-sm text-muted-foreground">{formatTimestamp(step.timestamp)}</span>
                                         <span className="text-[10px] uppercase tracking-wider text-primary font-black bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">{step.lifecycle_phase}</span>
                                         <span className="font-bold text-foreground text-sm">{step.entity_name}</span>
                                         <span className={cn(
@@ -995,16 +1028,8 @@ export default function AuditTimeline() {
 
     if (dataType === 'audit') {
         return [...dataToFilter].sort((a, b) => {
-            const dateA = new Date(a.business_timestamp).getTime();
-            const dateB = new Date(b.business_timestamp).getTime();
-            // Handle potentially invalid date strings gracefully
-            if (isNaN(dateA) || isNaN(dateB)) {
-                const rawA = new Date(a.created_timestamp).getTime();
-                const rawB = new Date(b.created_timestamp).getTime();
-                if (isNaN(rawA) || isNaN(rawB)) return 0;
-                return sortOrder === 'asc' ? rawA - rawB : rawB - rawA;
-            }
-            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+            const diff = a.raw_business_time - b.raw_business_time;
+            return sortOrder === 'asc' ? diff : -diff;
         });
     }
     return dataToFilter;
@@ -1030,7 +1055,6 @@ export default function AuditTimeline() {
         }
 
         filteredData.forEach(event => {
-            const isUpdate = event.action.toLowerCase().includes('update');
             const diffs = (event.parsed_difference_list && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
                 ? event.parsed_difference_list 
                 : [null];
@@ -1039,8 +1063,7 @@ export default function AuditTimeline() {
                 const row: {[key: string]: any} = {};
                 
                 if (index === 0) {
-                    const displayDate = new Date(event.business_timestamp);
-                    row['Timestamp'] = isNaN(displayDate.getTime()) ? event.business_timestamp : format(displayDate, 'PPpp');
+                    row['Timestamp'] = event.business_timestamp;
                     row['Entity'] = event.entity_name;
                     row['Entity ID'] = event.entity_id || '';
                     row['Action'] = event.action;
@@ -1055,8 +1078,9 @@ export default function AuditTimeline() {
                 }
 
                 if (diff) {
-                    const oldValue = String(diff.oldValue ?? 'none');
-                    const newValue = String(diff.newValue ?? 'none');
+                    const isTime = diff.field?.toLowerCase().includes('timestamp');
+                    const oldValue = isTime ? formatTimestamp(String(diff.oldValue ?? 'none')) : String(diff.oldValue ?? 'none');
+                    const newValue = isTime ? formatTimestamp(String(diff.newValue ?? 'none')) : String(diff.newValue ?? 'none');
                     row['Difference'] = `${diff.label || diff.field}: ${oldValue} -> ${newValue}`;
                 } else {
                     row['Difference'] = '';
@@ -1257,10 +1281,9 @@ export default function AuditTimeline() {
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
                     {filteredData.map((event, index) => {
-                        const { business_timestamp, created_timestamp, entity_name, action } = event;
+                        const { business_timestamp, action, entity_name } = event;
                         if (!action) return null;
                         
-                        const eventDate = new Date(business_timestamp || created_timestamp);
                         const icon = getIconForEvent(action);
 
                         return (
@@ -1278,7 +1301,7 @@ export default function AuditTimeline() {
                             }}
                             contentArrowStyle={{ borderRight: '7px solid hsl(var(--card))' }}
                             dateClassName="!text-muted-foreground !font-sans"
-                            date={isNaN(eventDate.getTime()) ? (business_timestamp || created_timestamp) : format(eventDate, "PPpp")}
+                            date={business_timestamp}
                             iconStyle={{ 
                                 background: 'hsl(var(--primary))', 
                                 color: 'hsl(var(--primary-foreground))',
