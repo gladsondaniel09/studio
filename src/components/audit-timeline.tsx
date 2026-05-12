@@ -45,7 +45,7 @@ import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 import { replicateIncident } from '@/ai/flows/replicate-incident-flow';
 import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
-
+import { RawJsonViewer } from './raw-json-viewer';
 
 // Extend the AuditEvent type to include our pre-processed fields
 export type ProcessedAuditEvent = AuditEvent & {
@@ -53,72 +53,6 @@ export type ProcessedAuditEvent = AuditEvent & {
     parsed_difference_list: any;
     searchable_text: string;
 };
-
-// Generic type for any row of data from an unknown file
-type GenericRow = { [key: string]: any };
-
-
-const RawJsonViewer = ({ jsonString, title }: { jsonString: string | undefined, title: string }) => {
-    const { toast } = useToast();
-    const [searchTerm, setSearchTerm] = useState('');
-
-    if (!jsonString || jsonString === 'NULL') return null;
-
-    let parsedJson;
-    try {
-        parsedJson = JSON.parse(jsonString);
-    } catch (e) {
-        parsedJson = jsonString;
-    }
-    const formattedJson = JSON.stringify(parsedJson, null, 2);
-
-    const handleCopy = () => {
-        navigator.clipboard.writeText(formattedJson);
-        toast({ title: 'Success', description: 'Raw JSON copied to clipboard.' });
-    };
-
-    const highlightedJson = useMemo(() => {
-        if (!searchTerm) return formattedJson;
-        const parts = formattedJson.split(new RegExp(`(${searchTerm})`, 'gi'));
-        return (
-            <span>
-                {parts.map((part, i) =>
-                    part.toLowerCase() === searchTerm.toLowerCase() ? (
-                        <mark key={i} className="bg-primary text-primary-foreground p-0 rounded">
-                            {part}
-                        </mark>
-                    ) : (
-                        part
-                    )
-                )}
-            </span>
-        );
-    }, [searchTerm, formattedJson]);
-    
-    return (
-        <div className="space-y-2">
-            <h4 className="font-semibold">{title}</h4>
-            <div className="flex gap-2">
-                <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search in JSON..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 h-9"
-                    />
-                </div>
-                <Button variant="outline" size="icon" onClick={handleCopy} className='shrink-0'>
-                    <Copy className="h-4 w-4" />
-                </Button>
-            </div>
-            <div className="bg-muted rounded-md p-4 max-h-96 overflow-auto">
-                <pre className="text-xs">{highlightedJson}</pre>
-            </div>
-        </div>
-    );
-};
-
 
 const getIconForEvent = (eventType: string) => {
   if (typeof eventType !== 'string') {
@@ -263,7 +197,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
     const hasRawDetails = (payload && payload !== "NULL") || (difference_list && difference_list !== "NULL");
 
     return (
-        <div className="p-4">
+        <div className="p-4 space-y-6">
             {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
             
             {hasRawDetails && (
@@ -275,9 +209,9 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
                             </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <RawJsonViewer jsonString={difference_list} title="difference_list (JSON)" />
-                                <RawJsonViewer jsonString={payload} title="payload (JSON)" />
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[400px]">
+                                <RawJsonViewer jsonString={payload ?? undefined} title="payload (JSON)" />
+                                <RawJsonViewer jsonString={difference_list ?? undefined} title="difference_list (JSON)" />
                             </div>
                         </AccordionContent>
                     </AccordionItem>
@@ -639,7 +573,7 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                                 <Code className="h-3.5 w-3.5" /> Full AI Metadata Trace
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent className="bg-muted/30 px-4 pb-4 rounded-b-lg">
+                        <AccordionContent className="bg-muted/30 px-4 pb-4 rounded-b-lg h-[500px]">
                            <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Reconstruction Data" />
                         </AccordionContent>
                     </AccordionItem>
@@ -693,7 +627,7 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
                                 <Code className="h-3 w-3" /> Technical Trace
                             </div>
                         </AccordionTrigger>
-                        <AccordionContent>
+                        <AccordionContent className='h-[400px]'>
                            <RawJsonViewer jsonString={JSON.stringify(result, null, 2)} title="AI Replicate Data" />
                         </AccordionContent>
                     </AccordionItem>
@@ -1032,7 +966,7 @@ export default function AuditTimeline() {
             const dateA = new Date(a.created_timestamp).getTime();
             const dateB = new Date(b.created_timestamp).getTime();
             if (isNaN(dateA) || isNaN(dateB)) return 0;
-            return sortOrder === 'asc' ? dateA - dateB : dateB - a;
+            return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
         });
     }
     return dataToFilter;

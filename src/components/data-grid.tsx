@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -7,7 +6,7 @@ import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Button } from './ui/button';
-import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { renderDetails } from './audit-timeline';
 import { Input } from './ui/input';
@@ -16,6 +15,7 @@ import { Checkbox } from './ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { RawJsonViewer } from './raw-json-viewer';
 
 type GenericRow = { [key: string]: any };
 
@@ -31,7 +31,7 @@ interface SortConfig {
 }
 
 function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
-  return (row as any).id || (row as any).uuid || (row as any).created_timestamp || Math.random().toString();
+  return (row as any).id || (row as any).uuid || (row as any).created_timestamp || (row as any).entity_id || Math.random().toString();
 }
 
 const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
@@ -39,7 +39,7 @@ const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-6 w-6">
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => e.stopPropagation()}>
           <Maximize className="h-3 w-3" />
         </Button>
       </DialogTrigger>
@@ -62,6 +62,7 @@ const ExpandedRow = ({ row }: { row: ProcessedAuditEvent | GenericRow }) => {
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
+  const [selectedRow, setSelectedRow] = useState<any | null>(null);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -302,8 +303,12 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     setColumns(newColumns);
   }, []);
 
+  const handleRowClick = useCallback((row: any) => {
+    setSelectedRow(prev => prev === row ? null : row);
+  }, []);
+
   return (
-    <div className="border rounded-md overflow-hidden bg-card h-full shadow-sm flex flex-col">
+    <div className="border rounded-md overflow-hidden bg-card h-full shadow-sm flex flex-col relative">
       <div className="flex-grow min-h-0">
         <DataGrid
           rowKeyGetter={rowKeyGetter}
@@ -311,10 +316,52 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           rows={pagedRows}
           onColumnsChange={handleColumnsChange}
           headerRowHeight={45}
+          onRowClick={handleRowClick}
+          rowClass={(row) => cn(
+            "cursor-pointer transition-colors",
+            row === selectedRow ? "bg-primary/5 font-medium" : "hover:bg-muted/30"
+          )}
           className="rdg-light h-full border-none"
           style={{ height: '100%' }}
         />
       </div>
+
+      {/* Bottom Inspection Pane */}
+      {selectedRow && (
+        <div className="border-t bg-card h-[350px] shrink-0 flex flex-col animate-in slide-in-from-bottom duration-300 z-10">
+          <div className="flex items-center justify-between px-4 py-2 bg-muted/20 border-b shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded bg-primary/10">
+                <Info className="h-3.5 w-3.5 text-primary" />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/70">
+                Inspection Pane
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setSelectedRow(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 p-4 overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+              {selectedRow.payload && selectedRow.payload !== 'NULL' ? (
+                <RawJsonViewer jsonString={selectedRow.payload} title="Payload Data" />
+              ) : (!selectedRow.difference_list || selectedRow.difference_list === 'NULL') ? (
+                <div className="col-span-full h-full">
+                  <RawJsonViewer jsonString={JSON.stringify(selectedRow, null, 2)} title="Raw Record Metadata" />
+                </div>
+              ) : null}
+
+              {selectedRow.difference_list && selectedRow.difference_list !== 'NULL' && (
+                <RawJsonViewer jsonString={selectedRow.difference_list} title="Difference List" />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="p-2 border-t bg-muted/30 text-[10px] text-muted-foreground flex justify-between items-center shrink-0">
         <div className="flex items-center gap-4">
           <div>
@@ -399,8 +446,9 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         </div>
 
         <div className="flex gap-2 text-right">
+          <span>• Click row for details</span>
           <span>• Drag headers to rearrange</span>
-          <span>• Click filter icon to sort & refine</span>
+          <span>• Filter icon to sort & refine</span>
         </div>
       </div>
     </div>
