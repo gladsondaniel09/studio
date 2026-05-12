@@ -52,6 +52,7 @@ export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
     searchable_text: string;
+    business_timestamp: string;
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -186,8 +187,8 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, ...otherDetails } = event;
-        const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL' && key !== 'searchable_text' && key !== 'parsed_payload' && key !== 'parsed_difference_list');
+        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, ...otherDetails } = event;
+        const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
             formattedView = <DetailView items={detailsToShow} type="key-value" />;
@@ -419,6 +420,7 @@ const processAuditData = (events: any[]): any[] => {
     let parsed_payload: any = null;
     let parsed_difference_list: any = null;
     let searchable_text: string = '';
+    let business_timestamp: string = event.created_timestamp;
 
     // Create searchable text for any object
     searchable_text = getObjectValues(event).toLowerCase();
@@ -427,11 +429,34 @@ const processAuditData = (events: any[]): any[] => {
         try {
             parsed_payload = JSON.parse(event.payload);
             searchable_text += ' ' + getObjectValues(parsed_payload).toLowerCase();
+
+            // 1. Extract Business Timestamp (Priority: payload.createdTimestamp -> payload.updatedTimestamp -> DB Timestamp)
+            if (parsed_payload.createdTimestamp) {
+                business_timestamp = parsed_payload.createdTimestamp;
+            } else if (parsed_payload.created_timestamp) {
+                business_timestamp = parsed_payload.created_timestamp;
+            } else if (parsed_payload.updatedTimestamp) {
+                business_timestamp = parsed_payload.updatedTimestamp;
+            }
+
+            // 2. Taomish Specific: Differences inside payload
+            if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
+                parsed_difference_list = parsed_payload.differences;
+                
+                // If we didn't find a timestamp in the root payload, check the differences array
+                if (business_timestamp === event.created_timestamp) {
+                     const tsDiff = parsed_payload.differences.find((d: any) => d.field === 'updatedTimestamp' || d.field === 'createdTimestamp');
+                     if (tsDiff && tsDiff.newValue) {
+                         business_timestamp = tsDiff.newValue;
+                     }
+                }
+            }
         } catch (e) {
             // Ignore if not valid JSON
         }
     }
-    if (event.difference_list && event.difference_list !== 'NULL') {
+
+    if (event.difference_list && event.difference_list !== 'NULL' && !parsed_difference_list) {
         try {
             parsed_difference_list = JSON.parse(event.difference_list);
             searchable_text += ' ' + getObjectValues(parsed_difference_list).toLowerCase();
@@ -445,6 +470,7 @@ const processAuditData = (events: any[]): any[] => {
       parsed_payload,
       parsed_difference_list,
       searchable_text,
+      business_timestamp, // High-fidelity timestamp for sorting and display
     };
   });
 };
@@ -638,7 +664,7 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
 };
 
 const AUDIT_LOG_COLUMNS = [
-    { key: 'created_timestamp', name: 'Timestamp' },
+    { key: 'business_timestamp', name: 'Timestamp' },
     { key: 'entity_name', name: 'Entity' },
     { key: 'entity_id', name: 'Entity ID' },
     { key: 'action', name: 'Action' },
@@ -867,7 +893,7 @@ export default function AuditTimeline() {
         try {
             const dataForAnalysis = filteredData.slice(0, 100);
             const logString = dataForAnalysis.map(e => JSON.stringify({
-                timestamp: e.created_timestamp,
+                timestamp: e.business_timestamp || e.created_timestamp,
                 action: e.action,
                 entity: e.entity_name,
                 entity_id: e.entity_id,
@@ -902,7 +928,7 @@ export default function AuditTimeline() {
         try {
             const dataForReplication = filteredData.slice(0, 100);
             const logString = dataForReplication.map(e => JSON.stringify({
-                timestamp: e.created_timestamp,
+                timestamp: e.business_timestamp || e.created_timestamp,
                 action: e.action,
                 entity: e.entity_name,
                 details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
@@ -969,9 +995,15 @@ export default function AuditTimeline() {
 
     if (dataType === 'audit') {
         return [...dataToFilter].sort((a, b) => {
-            const dateA = new Date(a.created_timestamp).getTime();
-            const dateB = new Date(b.created_timestamp).getTime();
-            if (isNaN(dateA) || isNaN(dateB)) return 0;
+            const dateA = new Date(a.business_timestamp).getTime();
+            const dateB = new Date(b.business_timestamp).getTime();
+            // Handle potentially invalid date strings gracefully
+            if (isNaN(dateA) || isNaN(dateB)) {
+                const rawA = new Date(a.created_timestamp).getTime();
+                const rawB = new Date(b.created_timestamp).getTime();
+                if (isNaN(rawA) || isNaN(rawB)) return 0;
+                return sortOrder === 'asc' ? rawA - rawB : rawB - rawA;
+            }
             return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
         });
     }
@@ -986,7 +1018,7 @@ export default function AuditTimeline() {
         return;
     }
 
-    const dataToExport = [];
+    const dataToExport: any[] = [];
     
     if (dataType === 'audit') {
         const headers = ['Timestamp', 'Entity', 'Entity ID', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
@@ -999,7 +1031,7 @@ export default function AuditTimeline() {
 
         filteredData.forEach(event => {
             const isUpdate = event.action.toLowerCase().includes('update');
-            const diffs = (isUpdate && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
+            const diffs = (event.parsed_difference_list && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
                 ? event.parsed_difference_list 
                 : [null];
             
@@ -1007,7 +1039,8 @@ export default function AuditTimeline() {
                 const row: {[key: string]: any} = {};
                 
                 if (index === 0) {
-                    row['Timestamp'] = format(new Date(event.created_timestamp), 'PPpp');
+                    const displayDate = new Date(event.business_timestamp);
+                    row['Timestamp'] = isNaN(displayDate.getTime()) ? event.business_timestamp : format(displayDate, 'PPpp');
                     row['Entity'] = event.entity_name;
                     row['Entity ID'] = event.entity_id || '';
                     row['Action'] = event.action;
@@ -1224,10 +1257,10 @@ export default function AuditTimeline() {
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
                     {filteredData.map((event, index) => {
-                        const { created_timestamp, entity_name, action } = event;
-                        if (!created_timestamp || !action) return null;
+                        const { business_timestamp, created_timestamp, entity_name, action } = event;
+                        if (!action) return null;
                         
-                        const eventDate = new Date(created_timestamp);
+                        const eventDate = new Date(business_timestamp || created_timestamp);
                         const icon = getIconForEvent(action);
 
                         return (
@@ -1245,7 +1278,7 @@ export default function AuditTimeline() {
                             }}
                             contentArrowStyle={{ borderRight: '7px solid hsl(var(--card))' }}
                             dateClassName="!text-muted-foreground !font-sans"
-                            date={format(eventDate, "PPpp")}
+                            date={isNaN(eventDate.getTime()) ? (business_timestamp || created_timestamp) : format(eventDate, "PPpp")}
                             iconStyle={{ 
                                 background: 'hsl(var(--primary))', 
                                 color: 'hsl(var(--primary-foreground))',
