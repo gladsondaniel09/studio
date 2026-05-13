@@ -47,48 +47,41 @@ import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
 
-// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS
+// Standardize timestamps exactly as received using Regex to avoid JS Date timezone shifts
 const formatTimestamp = (ts: string | undefined): string => {
   if (!ts || ts === 'NULL') return '';
-  
-  try {
-    // 1. Handle DD-MM-YYYY HH:mm[:ss] format
-    const ddmmyyyyMatch = ts.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2})(?::(\d{2}))?.*$/);
-    if (ddmmyyyyMatch) {
-      const [_, d, m, y, h, min, s = "00"] = ddmmyyyyMatch;
-      return `${y}-${m}-${d} ${h}:${min}:${s}.000`;
-    }
 
-    // 2. Standard ISO/JS Date Parsing
-    const date = new Date(ts);
-    if (isNaN(date.getTime())) return ts;
-
-    // Use UTC methods to prevent local timezone shifts if 'T' or 'Z' is present
-    const hasTZ = ts.includes('T') || ts.includes('Z');
-    
-    const year = hasTZ ? date.getUTCFullYear() : date.getFullYear();
-    const month = String((hasTZ ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
-    const day = String(hasTZ ? date.getUTCDate() : date.getDate()).padStart(2, '0');
-    const hours = String(hasTZ ? date.getUTCHours() : date.getHours()).padStart(2, '0');
-    const minutes = String(hasTZ ? date.getUTCMinutes() : date.getMinutes()).padStart(2, '0');
-    const seconds = String(hasTZ ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
-    const ms = String(hasTZ ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
-
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
-  } catch (e) {
-    return ts;
+  // 1. Try ISO Style: 2026-04-07T02:29:00.584675Z or 2026-04-07 02:29:00
+  const isoMatch = ts.match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d{3,}))?/);
+  if (isoMatch) {
+    const [_, y, m, d, hh, mm, ss = "00", ms = "000"] = isoMatch;
+    return `${y}-${m}-${d} ${hh}:${mm}:${ss}.${ms.substring(0, 3)}`;
   }
+
+  // 2. Try DD-MM-YYYY Style: 07-04-2026 02:29:00
+  const ddmmyyyyMatch = ts.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d{3,}))?/);
+  if (ddmmyyyyMatch) {
+    const [_, d, m, y, hh, mm, ss = "00", ms = "000"] = ddmmyyyyMatch;
+    return `${y}-${m}-${d} ${hh}:${mm}:${ss}.${ms.substring(0, 3)}`;
+  }
+
+  return ts; // Fallback to raw string if no regex match
 };
 
-const getRawTime = (ts: string): number => {
-    if (!ts || ts === 'NULL') return 0;
-    const ddmmyyyyMatch = ts.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2})(?::(\d{2}))?.*$/);
-    if (ddmmyyyyMatch) {
-        const [_, d, m, y, h, min, s = "00"] = ddmmyyyyMatch;
-        return new Date(`${y}-${m}-${d}T${h}:${min}:${s}`).getTime() || 0;
-    }
-    return new Date(ts).getTime() || 0;
-}
+// Sortable numeric extraction (YYYYMMDDHHmmssSSS) to maintain chronological order without Date parsing
+const getRawTime = (ts: string | undefined): number => {
+  if (!ts || ts === 'NULL') return 0;
+  const formatted = formatTimestamp(ts);
+  // Match our standardized format: YYYY-MM-DD HH:mm:ss.SSS
+  const match = formatted.match(/^(\d{4})-(\d{2})-(\d{2})\s(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+  if (match) {
+    const [_, y, m, d, hh, mm, ss, ms] = match;
+    return Number(`${y}${m}${d}${hh}${mm}${ss}${ms}`);
+  }
+  // Generic numeric fallback for unknown formats
+  const digits = ts.replace(/\D/g, '');
+  return digits ? Number(digits.substring(0, 15)) : 0;
+};
 
 // Extend the AuditEvent type to include our pre-processed fields
 export type ProcessedAuditEvent = AuditEvent & {
@@ -474,16 +467,14 @@ const processAuditData = (events: any[]): any[] => {
     let searchable_text = getObjectValues(event).toLowerCase();
     
     let payload_updated_ts: string | null = null;
-    let payload_created_ts: string | null = null;
 
     if (event.payload && event.payload !== 'NULL') {
         try {
             parsed_payload = JSON.parse(event.payload);
             searchable_text += ' ' + getObjectValues(parsed_payload).toLowerCase();
 
-            // Extract timestamps from payload
+            // Prioritize payload updatedTimestamp as requested
             payload_updated_ts = parsed_payload.updatedTimestamp || parsed_payload.updated_timestamp;
-            payload_created_ts = parsed_payload.createdTimestamp || parsed_payload.created_timestamp;
 
             // Check differences array if present
             if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
@@ -510,11 +501,11 @@ const processAuditData = (events: any[]): any[] => {
         } catch (e) {}
     }
 
-    // TIMESTAMP column: Use payload updatedTimestamp, fallback to CSV created_timestamp
+    // TIMESTAMP column logic: Use payload updatedTimestamp, fallback to CSV created_timestamp
     const business_timestamp = formatTimestamp(payload_updated_ts || event.created_timestamp);
     const raw_business_time = getRawTime(payload_updated_ts || event.created_timestamp);
 
-    // USER column logic: CREATE -> createdby, UPDATE -> updatedby. Fallback to null.
+    // USER column logic: If CREATE, use createdby. If UPDATE, use updatedby. Else null.
     let display_user: string | null = null;
     const actionLower = (event.action || '').toLowerCase();
     if (actionLower.includes('create')) {
@@ -1072,7 +1063,7 @@ export default function AuditTimeline() {
     const dataToExport: any[] = [];
     
     if (dataType === 'audit') {
-        const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'USER', 'PAYLOAD'];
+        const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'USER', 'PAYLOAD', 'DIFFERENCE'];
         
         filteredData.forEach(event => {
             const row: {[key: string]: any} = {};
@@ -1082,6 +1073,7 @@ export default function AuditTimeline() {
             row['ACTION'] = event.action;
             row['USER'] = event.display_user || '';
             row['PAYLOAD'] = event.payload === 'NULL' ? '' : event.payload;
+            row['DIFFERENCE'] = event.difference_list === 'NULL' ? '' : event.difference_list;
             dataToExport.push(row);
         });
     } else { // Generic Data
