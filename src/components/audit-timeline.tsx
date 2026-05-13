@@ -47,26 +47,50 @@ import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
 
-// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS
+// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS without timezone shifting
 const formatTimestamp = (ts: string | undefined): string => {
   if (!ts || ts === 'NULL') return '';
+  
   try {
+    // 1. Handle DD-MM-YYYY HH:mm[:ss] format seen in screenshot
+    const ddmmyyyyMatch = ts.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2})(?::(\d{2}))?.*$/);
+    if (ddmmyyyyMatch) {
+      const [_, d, m, y, h, min, s = "00"] = ddmmyyyyMatch;
+      return `${y}-${m}-${d} ${h}:${min}:${s}.000`;
+    }
+
+    // 2. Standard JS Date Parsing
     const date = new Date(ts);
     if (isNaN(date.getTime())) return ts;
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
+    // Detect if the string has a timezone indicator (Z or +/- offset)
+    const hasTimezone = /Z|[+-]\d{2}:?\d{2}$/.test(ts);
+
+    // If it has a timezone (like ISO Z), use UTC methods to show the "original" log time.
+    // If it doesn't, use local methods to match the "wall clock" interpretation.
+    const year = hasTimezone ? date.getUTCFullYear() : date.getFullYear();
+    const month = String((hasTimezone ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
+    const day = String(hasTimezone ? date.getUTCDate() : date.getDate()).padStart(2, '0');
+    const hours = String(hasTimezone ? date.getUTCHours() : date.getHours()).padStart(2, '0');
+    const minutes = String(hasTimezone ? date.getUTCMinutes() : date.getMinutes()).padStart(2, '0');
+    const seconds = String(hasTimezone ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
+    const ms = String(hasTimezone ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
 
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
   } catch (e) {
     return ts;
   }
 };
+
+const getRawTime = (ts: string): number => {
+    if (!ts || ts === 'NULL') return 0;
+    const ddmmyyyyMatch = ts.match(/^(\d{2})-(\d{2})-(\d{4})\s(\d{2}):(\d{2})(?::(\d{2}))?.*$/);
+    if (ddmmyyyyMatch) {
+        const [_, d, m, y, h, min, s = "00"] = ddmmyyyyMatch;
+        return new Date(`${y}-${m}-${d}T${h}:${min}:${s}`).getTime() || 0;
+    }
+    return new Date(ts).getTime() || 0;
+}
 
 // Extend the AuditEvent type to include our pre-processed fields
 export type ProcessedAuditEvent = AuditEvent & {
@@ -495,7 +519,7 @@ const processAuditData = (events: any[]): any[] => {
     }
 
     const business_timestamp = formatTimestamp(raw_ts);
-    const raw_business_time = new Date(raw_ts).getTime() || 0;
+    const raw_business_time = getRawTime(raw_ts);
 
     return {
       ...event,
