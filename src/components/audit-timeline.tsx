@@ -47,7 +47,7 @@ import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
 
-// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS without timezone shifting
+// Standardize timestamps to YYYY-MM-DD HH:mm:ss.SSS
 const formatTimestamp = (ts: string | undefined): string => {
   if (!ts || ts === 'NULL') return '';
   
@@ -59,23 +59,21 @@ const formatTimestamp = (ts: string | undefined): string => {
       return `${y}-${m}-${d} ${h}:${min}:${s}.000`;
     }
 
-    // 2. Standard JS Date Parsing
+    // 2. Standard ISO/JS Date Parsing
     const date = new Date(ts);
     if (isNaN(date.getTime())) return ts;
 
-    // Detect if the string has a timezone indicator (Z or +/- offset)
-    const hasTimezone = /Z|[+-]\d{2}:?\d{2}$/.test(ts);
+    // Use UTC methods to prevent local timezone shifts if 'T' or 'Z' is present
+    const hasTZ = ts.includes('T') || ts.includes('Z');
+    
+    const year = hasTZ ? date.getUTCFullYear() : date.getFullYear();
+    const month = String((hasTZ ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
+    const day = String(hasTZ ? date.getUTCDate() : date.getDate()).padStart(2, '0');
+    const hours = String(hasTZ ? date.getUTCHours() : date.getHours()).padStart(2, '0');
+    const minutes = String(hasTZ ? date.getUTCMinutes() : date.getMinutes()).padStart(2, '0');
+    const seconds = String(hasTZ ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
+    const ms = String(hasTZ ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
 
-    // Extraction
-    const year = hasTimezone ? date.getUTCFullYear() : date.getFullYear();
-    const month = String((hasTimezone ? date.getUTCMonth() : date.getMonth()) + 1).padStart(2, '0');
-    const day = String(hasTimezone ? date.getUTCDate() : date.getDate()).padStart(2, '0');
-    const hours = String(hasTimezone ? date.getUTCHours() : date.getHours()).padStart(2, '0');
-    const minutes = String(hasTimezone ? date.getUTCMinutes() : date.getMinutes()).padStart(2, '0');
-    const seconds = String(hasTimezone ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
-    const ms = String(hasTimezone ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
-
-    // Return strict standardized format including minutes
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
   } catch (e) {
     return ts;
@@ -97,10 +95,9 @@ export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
     searchable_text: string;
-    business_timestamp: string; // Formatted for display (Created Timestamp from Payload)
-    update_timestamp: string;   // New: Updated Timestamp from Payload
+    business_timestamp: string; // This is the primary TIMESTAMP column
     raw_business_time: number;   // For sorting
-    display_user: string;        // Formatted user for grid
+    display_user: string | null; // Forensic user from payload
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -237,7 +234,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, update_timestamp, raw_business_time, display_user, ...otherDetails } = event;
+        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_user, ...otherDetails } = event;
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
@@ -474,13 +471,10 @@ const processAuditData = (events: any[]): any[] => {
   return events.map(event => {
     let parsed_payload: any = null;
     let parsed_difference_list: any = null;
-    let searchable_text: string = '';
+    let searchable_text = getObjectValues(event).toLowerCase();
     
-    let payload_created_ts: string | null = null;
     let payload_updated_ts: string | null = null;
-
-    // Create searchable text for any object
-    searchable_text = getObjectValues(event).toLowerCase();
+    let payload_created_ts: string | null = null;
 
     if (event.payload && event.payload !== 'NULL') {
         try {
@@ -488,18 +482,12 @@ const processAuditData = (events: any[]): any[] => {
             searchable_text += ' ' + getObjectValues(parsed_payload).toLowerCase();
 
             // Extract timestamps from payload
-            payload_created_ts = parsed_payload.createdTimestamp || parsed_payload.created_timestamp;
             payload_updated_ts = parsed_payload.updatedTimestamp || parsed_payload.updated_timestamp;
+            payload_created_ts = parsed_payload.createdTimestamp || parsed_payload.created_timestamp;
 
             // Check differences array if present
             if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
                 parsed_difference_list = parsed_payload.differences;
-                
-                // Fallback for timestamps if missing in root
-                if (!payload_created_ts) {
-                    const cTs = parsed_payload.differences.find((d: any) => d.field === 'createdTimestamp');
-                    if (cTs) payload_created_ts = cTs.newValue;
-                }
                 if (!payload_updated_ts) {
                     const uTs = parsed_payload.differences.find((d: any) => d.field === 'updatedTimestamp');
                     if (uTs) payload_updated_ts = uTs.newValue;
@@ -513,12 +501,7 @@ const processAuditData = (events: any[]): any[] => {
             parsed_difference_list = JSON.parse(event.difference_list);
             searchable_text += ' ' + getObjectValues(parsed_difference_list).toLowerCase();
             
-            // Look for timestamps in generic difference list
             if (Array.isArray(parsed_difference_list)) {
-                if (!payload_created_ts) {
-                    const cTs = parsed_difference_list.find((d: any) => d.field === 'createdTimestamp');
-                    if (cTs) payload_created_ts = cTs.newValue;
-                }
                 if (!payload_updated_ts) {
                     const uTs = parsed_difference_list.find((d: any) => d.field === 'updatedTimestamp');
                     if (uTs) payload_updated_ts = uTs.newValue;
@@ -527,15 +510,18 @@ const processAuditData = (events: any[]): any[] => {
         } catch (e) {}
     }
 
-    // "TIMESTAMP" column is the Payload Created Timestamp (fallback to DB)
-    const business_timestamp = formatTimestamp(payload_created_ts || event.created_timestamp);
-    // "UPDATE TIMESTAMP" column is the Payload Updated Timestamp
-    const update_timestamp = formatTimestamp(payload_updated_ts);
-    
-    const raw_business_time = getRawTime(payload_created_ts || event.created_timestamp);
+    // TIMESTAMP column: Use payload updatedTimestamp, fallback to CSV created_timestamp
+    const business_timestamp = formatTimestamp(payload_updated_ts || event.created_timestamp);
+    const raw_business_time = getRawTime(payload_updated_ts || event.created_timestamp);
 
-    // Format display user
-    const display_user = event.user ? (typeof event.user === 'string' ? event.user : (event.user.name || event.user.email || '')) : '';
+    // USER column logic: CREATE -> createdby, UPDATE -> updatedby. Fallback to null.
+    let display_user: string | null = null;
+    const actionLower = (event.action || '').toLowerCase();
+    if (actionLower.includes('create')) {
+        display_user = parsed_payload?.createdby || parsed_payload?.created_by || null;
+    } else if (actionLower.includes('update')) {
+        display_user = parsed_payload?.updatedby || parsed_payload?.updated_by || null;
+    }
 
     return {
       ...event,
@@ -543,7 +529,6 @@ const processAuditData = (events: any[]): any[] => {
       parsed_difference_list,
       searchable_text,
       business_timestamp, 
-      update_timestamp,
       raw_business_time,   
       display_user,
     };
@@ -740,8 +725,6 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
 
 const AUDIT_LOG_COLUMNS = [
     { key: 'business_timestamp', name: 'TIMESTAMP' },
-    { key: 'update_timestamp', name: 'UPDATE TIMESTAMP' },
-    { key: 'created_timestamp', name: 'AUDIT LOG TS' },
     { key: 'entity_name', name: 'ENTITY' },
     { key: 'entity_id', name: 'ENTITY ID' },
     { key: 'action', name: 'ACTION' },
@@ -975,7 +958,7 @@ export default function AuditTimeline() {
                 entity_id: e.entity_id,
                 parent_id: e.parent_id,
                 table_name: e.table_name,
-                user: e.user?.name,
+                user: e.display_user,
                 payload: e.payload !== 'NULL' ? e.payload : undefined,
                 differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
             }, (key, value) => value === undefined ? undefined : value)).join('\n');
@@ -1089,50 +1072,17 @@ export default function AuditTimeline() {
     const dataToExport: any[] = [];
     
     if (dataType === 'audit') {
-        const headers = ['Timestamp', 'Update Timestamp', 'Audit Log TS', 'Entity', 'Entity ID', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
-        const getTradeId = (event: ProcessedAuditEvent) => {
-            if (event.parsed_payload) {
-                return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
-            }
-            return null;
-        }
-
+        const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'USER', 'PAYLOAD'];
+        
         filteredData.forEach(event => {
-            const diffs = (event.parsed_difference_list && Array.isArray(event.parsed_difference_list) && event.parsed_difference_list.length > 0) 
-                ? event.parsed_difference_list 
-                : [null];
-            
-            diffs.forEach((diff, index) => {
-                const row: {[key: string]: any} = {};
-                
-                if (index === 0) {
-                    row['Timestamp'] = event.business_timestamp;
-                    row['Update Timestamp'] = event.update_timestamp;
-                    row['Audit Log TS'] = event.created_timestamp;
-                    row['Entity'] = event.entity_name;
-                    row['Entity ID'] = event.entity_id || '';
-                    row['Action'] = event.action;
-                    row['User'] = event.display_user || 'N/A';
-                    row['Trade ID'] = getTradeId(event) || '';
-                    row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
-                    row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
-                } else {
-                    headers.forEach(h => {
-                      if (h !== 'Difference') row[h] = '';
-                    });
-                }
-
-                if (diff) {
-                    const isTime = diff.field?.toLowerCase().includes('timestamp');
-                    const oldValue = isTime ? formatTimestamp(String(diff.oldValue ?? 'none')) : String(diff.oldValue ?? 'none');
-                    const newValue = isTime ? formatTimestamp(String(diff.newValue ?? 'none')) : String(diff.newValue ?? 'none');
-                    row['Difference'] = `${diff.label || diff.field}: ${oldValue} -> ${newValue}`;
-                } else {
-                    row['Difference'] = '';
-                }
-
-                dataToExport.push(row);
-            });
+            const row: {[key: string]: any} = {};
+            row['TIMESTAMP'] = event.business_timestamp;
+            row['ENTITY'] = event.entity_name;
+            row['ENTITY ID'] = event.entity_id || '';
+            row['ACTION'] = event.action;
+            row['USER'] = event.display_user || '';
+            row['PAYLOAD'] = event.payload === 'NULL' ? '' : event.payload;
+            dataToExport.push(row);
         });
     } else { // Generic Data
         filteredData.forEach(row => {
