@@ -76,7 +76,7 @@ const formatTimestamp = (ts: string | undefined): string => {
     const seconds = String(hasTimezone ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
     const ms = String(hasTimezone ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
 
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
+    return `${year}-${month}-${day} ${hours}:${seconds}.${ms}`;
   } catch (e) {
     return ts;
   }
@@ -99,6 +99,7 @@ export type ProcessedAuditEvent = AuditEvent & {
     searchable_text: string;
     business_timestamp: string; // Formatted for display
     raw_business_time: number;   // For sorting
+    display_user: string;        // Formatted user for grid
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -235,7 +236,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, ...otherDetails } = event;
+        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_user, ...otherDetails } = event;
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
@@ -521,6 +522,9 @@ const processAuditData = (events: any[]): any[] => {
     const business_timestamp = formatTimestamp(raw_ts);
     const raw_business_time = getRawTime(raw_ts);
 
+    // Format display user
+    const display_user = event.user ? (typeof event.user === 'string' ? event.user : (event.user.name || event.user.email || '')) : '';
+
     return {
       ...event,
       parsed_payload,
@@ -528,6 +532,7 @@ const processAuditData = (events: any[]): any[] => {
       searchable_text,
       business_timestamp, // High-fidelity standardized timestamp for display
       raw_business_time,   // For sorting
+      display_user,
     };
   });
 };
@@ -721,13 +726,13 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
 };
 
 const AUDIT_LOG_COLUMNS = [
-    { key: 'business_timestamp', name: 'Timestamp' },
-    { key: 'entity_name', name: 'Entity' },
-    { key: 'entity_id', name: 'Entity ID' },
-    { key: 'action', name: 'Action' },
-    { key: 'user', name: 'User' },
-    { key: 'payload', name: 'Payload' },
-    { key: 'difference_list', name: 'Difference List' },
+    { key: 'business_timestamp', name: 'TIMESTAMP' },
+    { key: 'created_timestamp', name: 'AUDIT LOG TS' },
+    { key: 'entity_name', name: 'ENTITY' },
+    { key: 'entity_id', name: 'ENTITY ID' },
+    { key: 'action', name: 'ACTION' },
+    { key: 'display_user', name: 'USER' },
+    { key: 'payload', name: 'PAYLOAD' },
 ];
 
 export default function AuditTimeline() {
@@ -896,7 +901,7 @@ export default function AuditTimeline() {
               setActiveView('timeline');
               setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
           } else {
-              const fileColumns = headers.map(header => ({ key: header, name: header, resizable: true }));
+              const fileColumns = headers.map(header => ({ key: header, name: header.toUpperCase(), resizable: true }));
               setColumns(fileColumns);
               setDataType('generic');
               setActiveView('table');
@@ -1070,7 +1075,7 @@ export default function AuditTimeline() {
     const dataToExport: any[] = [];
     
     if (dataType === 'audit') {
-        const headers = ['Timestamp', 'Entity', 'Entity ID', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
+        const headers = ['Timestamp', 'Audit Log TS', 'Entity', 'Entity ID', 'Action', 'User', 'Trade ID', 'Difference', 'Difference List', 'Payload'];
         const getTradeId = (event: ProcessedAuditEvent) => {
             if (event.parsed_payload) {
                 return event.parsed_payload.tradeId || event.parsed_payload.trade_id || event.parsed_payload.TradeId;
@@ -1088,10 +1093,11 @@ export default function AuditTimeline() {
                 
                 if (index === 0) {
                     row['Timestamp'] = event.business_timestamp;
+                    row['Audit Log TS'] = event.created_timestamp;
                     row['Entity'] = event.entity_name;
                     row['Entity ID'] = event.entity_id || '';
                     row['Action'] = event.action;
-                    row['User'] = event.user?.name || 'N/A';
+                    row['User'] = event.display_user || 'N/A';
                     row['Trade ID'] = getTradeId(event) || '';
                     row['Difference List'] = event.difference_list === 'NULL' ? '' : event.difference_list;
                     row['Payload'] = event.payload === 'NULL' ? '' : event.payload;
