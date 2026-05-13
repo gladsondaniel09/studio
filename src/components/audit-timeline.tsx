@@ -73,10 +73,10 @@ const formatTimestamp = (ts: string | undefined): string => {
     const day = String(hasTimezone ? date.getUTCDate() : date.getDate()).padStart(2, '0');
     const hours = String(hasTimezone ? date.getUTCHours() : date.getHours()).padStart(2, '0');
     const minutes = String(hasTimezone ? date.getUTCMinutes() : date.getMinutes()).padStart(2, '0');
-    const seconds = String(hasTimezone ? date.getUTCSeconds() : date.getSeconds()).padStart(2, '0');
+    const seconds = String(hasTimezone ? date.getUTCPublicSeconds() : date.getSeconds()).padStart(2, '0');
     const ms = String(hasTimezone ? date.getUTCMilliseconds() : date.getMilliseconds()).padStart(3, '0');
 
-    return `${year}-${month}-${day} ${hours}:${seconds}.${ms}`;
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
   } catch (e) {
     return ts;
   }
