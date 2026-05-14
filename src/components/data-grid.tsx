@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import DataGrid, { Column } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { Button } from './ui/button';
-import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, X } from 'lucide-react';
+import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, X, GripVertical } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { renderDetails } from './audit-timeline';
 import { Input } from './ui/input';
@@ -15,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Checkbox } from './ui/checkbox';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 import { RawJsonViewer } from './raw-json-viewer';
 
 type GenericRow = { [key: string]: any };
@@ -31,9 +30,6 @@ interface SortConfig {
   direction: 'ASC' | 'DESC' | null;
 }
 
-/**
- * Returns a stable unique identifier for a row.
- */
 function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
   return (row as any).id || 
          (row as any).uuid || 
@@ -55,25 +51,64 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
   const [selectedRow, setSelectedRow] = useState<any | null>(null);
   
-  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
-  // Modal Navigation State
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-  // Drawer State for explicit JSON cell clicks
+  // Inspector Panel State
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerJson, setDrawerJson] = useState<string | undefined>(undefined);
   const [drawerTitle, setDrawerTitle] = useState('');
+  
+  // Resizing State
+  const [panelWidth, setPanelWidth] = useState(540);
+  const [isResizing, setIsResizing] = useState(false);
+  const minWidth = 400;
+  const maxWidthRatio = 0.8;
 
-  // Custom Filter Dropdown Header
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = window.innerWidth - e.clientX;
+      const maxWidth = window.innerWidth * maxWidthRatio;
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setPanelWidth(newWidth);
+      }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
+
   const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
     const columnKey = column.key;
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Get unique values for this column
     const uniqueValues = useMemo(() => {
       const values = data.map(row => String(row[columnKey] ?? 'None'));
       return Array.from(new Set(values)).sort();
@@ -193,7 +228,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                   <Checkbox 
                     checked={selected.length === uniqueValues.length} 
                     className="h-3.5 w-3.5"
-                    onCheckedChange={() => {}} // Controlled manually via div click
+                    onCheckedChange={() => {}}
                   />
                   <label className="text-[11px] font-medium leading-none cursor-pointer truncate">
                     (Select All)
@@ -216,16 +251,12 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                 ))}
               </div>
             </ScrollArea>
-            <div className="p-2 bg-muted/30 flex justify-end gap-2 border-t">
-               <Button size="sm" className="h-7 text-[10px]" onClick={() => {}}>Done</Button>
-            </div>
           </PopoverContent>
         </Popover>
       </div>
     );
   }, [data, filters, sortConfig]);
 
-  // Apply Filters and Sorting to Data
   const processedRows = useMemo(() => {
     let filtered = data.filter(row => {
       return Object.entries(filters).every(([key, allowedValues]) => {
@@ -252,7 +283,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     return filtered;
   }, [data, filters, sortConfig]);
 
-  // Sync columns on prop change
   const columns = useMemo((): Column<any>[] => {
     return [
       {
@@ -284,7 +314,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         key: col.key,
         name: col.name,
         resizable: true,
-        draggable: true,
         renderCell: ({ row }: { row: any }) => {
           const value = row[col.key];
           const isJson = isJsonContent(value);
@@ -312,14 +341,12 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     ];
   }, [propColumns, FilterHeader, currentPage, pageSize]);
 
-  // Pagination Logic
   const totalPages = Math.ceil(processedRows.length / pageSize);
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return processedRows.slice(start, start + pageSize);
   }, [processedRows, currentPage, pageSize]);
 
-  // Modal Navigation
   const navigateDetails = (direction: 'next' | 'prev') => {
       if (expandedIndex === null) return;
       const newIndex = direction === 'next' ? expandedIndex + 1 : expandedIndex - 1;
@@ -330,7 +357,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
 
   const currentExpandedRow = expandedIndex !== null ? processedRows[expandedIndex] : null;
 
-  // Reset to first page when data/filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [processedRows.length, pageSize]);
@@ -340,7 +366,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
       if (!prev || !row) return row;
       const prevKey = rowKeyGetter(prev);
       const currentKey = rowKeyGetter(row);
-      // Toggle if clicking the same row
       return prevKey === currentKey ? null : row;
     });
   }, []);
@@ -351,161 +376,66 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   };
 
   return (
-    <div className="border rounded-md overflow-hidden bg-card h-full shadow-sm flex flex-col relative">
-      <div className="flex-grow min-h-0">
-        <DataGrid
-          rowKeyGetter={rowKeyGetter}
-          columns={columns}
-          rows={pagedRows}
-          headerRowHeight={45}
-          onRowClick={handleRowClick}
-          rowClass={(row) => cn(
-            "cursor-pointer transition-colors",
-            isRowSelected(row) ? "bg-primary/10 font-medium" : "hover:bg-muted/30"
-          )}
-          className="rdg-light h-full border-none"
-          style={{ height: '100%' }}
-        />
-      </div>
-
-      {/* Explicit JSON Inspection Drawer */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="right" className="w-[400px] sm:w-[540px] md:w-[700px] p-0 flex flex-col border-l shadow-2xl">
-          <SheetHeader className="p-6 border-b shrink-0 flex flex-row items-center justify-between">
-            <SheetTitle className="text-xl font-headline flex items-center gap-2">
-              <div className="p-1.5 rounded bg-primary/10 text-primary">
-                <Search className="h-4 w-4" />
-              </div>
-              {drawerTitle} Inspector
-            </SheetTitle>
-          </SheetHeader>
-          <div className="flex-grow min-h-0">
-             <RawJsonViewer jsonString={drawerJson} title={drawerTitle} />
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Forensic Detail Modal with Navigation */}
-      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-          <DialogContent className="max-w-4xl p-0">
-            <div className="max-h-[90vh] overflow-hidden flex flex-col">
-              <DialogHeader className="p-6 pb-4 shrink-0 flex flex-row items-center justify-between border-b">
-                <div>
-                    <DialogTitle className="text-xl font-headline">
-                        {currentExpandedRow && 'action' in currentExpandedRow 
-                            ? `${currentExpandedRow.action} on ${currentExpandedRow.entity_name}` 
-                            : 'Row Details'}
-                    </DialogTitle>
-                    <p className="text-xs text-muted-foreground font-medium mt-1">
-                        {expandedIndex !== null ? `Record ${expandedIndex + 1} of ${processedRows.length}` : ''}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 pr-8">
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-8 gap-1" 
-                        disabled={expandedIndex === 0}
-                        onClick={() => navigateDetails('prev')}
-                    >
-                        <ChevronLeft className="h-4 w-4" /> Previous
-                    </Button>
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-8 gap-1" 
-                        disabled={expandedIndex === processedRows.length - 1}
-                        onClick={() => navigateDetails('next')}
-                    >
-                        Next <ChevronRight className="h-4 w-4" />
-                    </Button>
-                </div>
-              </DialogHeader>
-              <ScrollArea className="flex-grow min-h-0">
-                <div className="px-6 pb-6 pt-4">
-                    {currentExpandedRow && renderDetails(currentExpandedRow as any)}
-                </div>
-              </ScrollArea>
-            </div>
-          </DialogContent>
-      </Dialog>
-
-      {/* Bottom Inspection Pane */}
-      {selectedRow && (
-        <div className="border-t bg-card h-[350px] shrink-0 flex flex-col animate-in slide-in-from-bottom duration-300 z-10">
-          <div className="flex items-center justify-between px-4 py-2 bg-muted/20 border-b shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="p-1 rounded bg-primary/10">
-                <Info className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/70">
-                Inspection Pane
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setSelectedRow(null)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div className="flex-1 min-h-0 p-4 overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
-              {/* Show Payload if it exists */}
-              {selectedRow.payload && selectedRow.payload !== 'NULL' ? (
-                <RawJsonViewer jsonString={selectedRow.payload} title="Payload Data" />
-              ) : (
-                <div className={cn("h-full", (selectedRow.difference_list && selectedRow.difference_list !== 'NULL') ? "" : "col-span-full")}>
-                  <RawJsonViewer jsonString={JSON.stringify(selectedRow, null, 2)} title="Raw Record Metadata" />
-                </div>
-              )}
-
-              {/* Show Difference List if it exists */}
-              {selectedRow.difference_list && selectedRow.difference_list !== 'NULL' && (
-                <RawJsonViewer jsonString={selectedRow.difference_list} title="Difference List" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="p-2 border-t bg-muted/30 text-[10px] text-muted-foreground flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-4">
-          <div>
-            Showing {processedRows.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-
-            {Math.min(currentPage * pageSize, processedRows.length)} of {processedRows.length} records
-          </div>
-          {(Object.keys(filters).length > 0 || sortConfig.columnKey) && (
-            <Button 
-              variant="link" 
-              size="sm" 
-              className="h-auto p-0 text-[10px] text-primary" 
-              onClick={() => {
-                setFilters({});
-                setSortConfig({ columnKey: null, direction: null });
-              }}
-            >
-              Clear all filters & sorts
-            </Button>
-          )}
+    <div className="flex h-full w-full overflow-hidden relative">
+      {/* Main Table Content */}
+      <div className="flex flex-col flex-1 min-w-0 border rounded-md bg-card shadow-sm h-full relative">
+        <div className="flex-grow min-h-0">
+          <DataGrid
+            rowKeyGetter={rowKeyGetter}
+            columns={columns}
+            rows={pagedRows}
+            headerRowHeight={45}
+            onRowClick={handleRowClick}
+            rowClass={(row) => cn(
+              "cursor-pointer transition-colors",
+              isRowSelected(row) ? "bg-primary/10 font-medium" : "hover:bg-muted/30"
+            )}
+            className="rdg-light h-full border-none"
+            style={{ height: '100%' }}
+          />
         </div>
 
-        {/* Pagination Controls */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="whitespace-nowrap">Rows per page:</span>
-            <Select 
-              value={String(pageSize)} 
-              onValueChange={(val) => setPageSize(Number(val))}
-            >
-              <SelectTrigger className="h-6 w-16 text-[10px] px-1">
-                <SelectValue placeholder={pageSize} />
-              </SelectTrigger>
-              <SelectContent>
-                {[20, 50, 100, 200].map(size => (
-                  <SelectItem key={size} value={String(size)} className="text-[10px]">{size}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* Bottom Inspection Pane */}
+        {selectedRow && (
+          <div className="border-t bg-card h-[350px] shrink-0 flex flex-col animate-in slide-in-from-bottom duration-300 z-10">
+            <div className="flex items-center justify-between px-4 py-2 bg-muted/20 border-b shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-1 rounded bg-primary/10">
+                  <Info className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/70">
+                  Inspection Pane
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-destructive/10 hover:text-destructive transition-colors" onClick={() => setSelectedRow(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 p-4 overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+                {selectedRow.payload && selectedRow.payload !== 'NULL' ? (
+                  <RawJsonViewer jsonString={selectedRow.payload} title="Payload Data" />
+                ) : (
+                  <div className={cn("h-full", (selectedRow.difference_list && selectedRow.difference_list !== 'NULL') ? "" : "col-span-full")}>
+                    <RawJsonViewer jsonString={JSON.stringify(selectedRow, null, 2)} title="Raw Record Metadata" />
+                  </div>
+                )}
+                {selectedRow.difference_list && selectedRow.difference_list !== 'NULL' && (
+                  <RawJsonViewer jsonString={selectedRow.difference_list} title="Difference List" />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="p-2 border-t bg-muted/30 text-[10px] text-muted-foreground flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-4">
+            <div>
+              Showing {processedRows.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-
+              {Math.min(currentPage * pageSize, processedRows.length)} of {processedRows.length} records
+            </div>
           </div>
 
           <div className="flex items-center gap-1">
@@ -549,14 +479,98 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
               <ChevronsRight className="h-3 w-3" />
             </Button>
           </div>
-        </div>
 
-        <div className="flex gap-2 text-right">
-          <span>• Click JSON cell for Inspector</span>
-          <span>• Click row for Inspection Pane</span>
-          <span>• Filter icon to sort & refine</span>
+          <div className="flex gap-2 text-right">
+            <span>• Click JSON cell for Inspector</span>
+            <span>• Filter icon to sort & refine</span>
+          </div>
         </div>
       </div>
+
+      {/* Resizable JSON Payload Inspector Panel */}
+      {drawerOpen && (
+        <>
+          {/* Draggable Resize Handle */}
+          <div 
+            className={cn(
+              "w-1.5 h-full cursor-col-resize hover:bg-primary/50 transition-colors z-40 shrink-0",
+              isResizing && "bg-primary"
+            )}
+            onMouseDown={startResizing}
+          >
+            <div className="h-full w-px bg-border mx-auto" />
+          </div>
+
+          {/* Forensic Inspector Sidebar */}
+          <div 
+            className="h-full bg-card border-l shadow-2xl flex flex-col shrink-0 animate-in slide-in-from-right duration-200"
+            style={{ width: `${panelWidth}px` }}
+          >
+            <div className="p-6 border-b shrink-0 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded bg-primary/10 text-primary">
+                  <Search className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold font-headline leading-none">{drawerTitle} Inspector</h3>
+                  <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-bold">Source JSON Inspection</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDrawerOpen(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="flex-grow min-h-0">
+               <RawJsonViewer jsonString={drawerJson} title={drawerTitle} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Forensic Detail Modal */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+          <DialogContent className="max-w-4xl p-0">
+            <div className="max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader className="p-6 pb-4 shrink-0 flex flex-row items-center justify-between border-b">
+                <div>
+                    <DialogTitle className="text-xl font-headline">
+                        {currentExpandedRow && 'action' in currentExpandedRow 
+                            ? `${currentExpandedRow.action} on ${currentExpandedRow.entity_name}` 
+                            : 'Row Details'}
+                    </DialogTitle>
+                    <p className="text-xs text-muted-foreground font-medium mt-1">
+                        {expandedIndex !== null ? `Record ${expandedIndex + 1} of ${processedRows.length}` : ''}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 pr-8">
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 gap-1" 
+                        disabled={expandedIndex === 0}
+                        onClick={() => navigateDetails('prev')}
+                    >
+                        <ChevronLeft className="h-4 w-4" /> Previous
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 gap-1" 
+                        disabled={expandedIndex === processedRows.length - 1}
+                        onClick={() => navigateDetails('next')}
+                    >
+                        Next <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+              </DialogHeader>
+              <ScrollArea className="flex-grow min-h-0">
+                <div className="px-6 pb-6 pt-4">
+                    {currentExpandedRow && renderDetails(currentExpandedRow as any)}
+                </div>
+              </ScrollArea>
+            </div>
+          </DialogContent>
+      </Dialog>
     </div>
   );
 }
