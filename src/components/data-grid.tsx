@@ -4,7 +4,8 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import DataGrid, { Column } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { Button } from './ui/button';
 import { Maximize, Search, Filter, ArrowUpAZ, ArrowDownZA, SortAsc, SortDesc, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Info, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
@@ -43,6 +44,12 @@ function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
          (row as any).PlannedObligationId;
 }
 
+const isJsonContent = (value: any): boolean => {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+};
+
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
@@ -55,6 +62,11 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
   // Modal Navigation State
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+  // Drawer State for explicit JSON cell clicks
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerJson, setDrawerJson] = useState<string | undefined>(undefined);
+  const [drawerTitle, setDrawerTitle] = useState('');
 
   // Custom Filter Dropdown Header
   const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
@@ -273,11 +285,28 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         name: col.name,
         resizable: true,
         draggable: true,
-        renderCell: ({ row }: { row: any }) => (
-          <div className="truncate whitespace-nowrap px-2 text-xs">
-            {String(row[col.key] ?? '')}
-          </div>
-        ),
+        renderCell: ({ row }: { row: any }) => {
+          const value = row[col.key];
+          const isJson = isJsonContent(value);
+          return (
+            <div 
+              className={cn(
+                "truncate whitespace-nowrap px-2 text-xs h-full flex items-center",
+                isJson && "cursor-pointer hover:text-primary transition-colors font-medium hover:underline"
+              )}
+              onClick={(e) => {
+                if (isJson) {
+                  e.stopPropagation();
+                  setDrawerJson(value);
+                  setDrawerTitle(col.name);
+                  setDrawerOpen(true);
+                }
+              }}
+            >
+              {String(value ?? '')}
+            </div>
+          );
+        },
         renderHeaderCell: (props: any) => <FilterHeader column={props.column} />
       }))
     ];
@@ -338,6 +367,23 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           style={{ height: '100%' }}
         />
       </div>
+
+      {/* Explicit JSON Inspection Drawer */}
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="right" className="w-[400px] sm:w-[540px] md:w-[700px] p-0 flex flex-col border-l shadow-2xl">
+          <SheetHeader className="p-6 border-b shrink-0 flex flex-row items-center justify-between">
+            <SheetTitle className="text-xl font-headline flex items-center gap-2">
+              <div className="p-1.5 rounded bg-primary/10 text-primary">
+                <Search className="h-4 w-4" />
+              </div>
+              {drawerTitle} Inspector
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-grow min-h-0">
+             <RawJsonViewer jsonString={drawerJson} title={drawerTitle} />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Forensic Detail Modal with Navigation */}
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
@@ -506,8 +552,8 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         </div>
 
         <div className="flex gap-2 text-right">
-          <span>• Click row for details</span>
-          <span>• Drag headers to rearrange</span>
+          <span>• Click JSON cell for Inspector</span>
+          <span>• Click row for Inspection Pane</span>
           <span>• Filter icon to sort & refine</span>
         </div>
       </div>
