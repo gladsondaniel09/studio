@@ -518,7 +518,7 @@ const processAuditData = (events: any[]): any[] => {
 };
 
 // Processes events in async chunks to keep the UI responsive during large file loads
-const processAuditDataChunked = (raw: any[], chunkSize = 2000): Promise<any[]> => {
+const processAuditDataChunked = (raw: any[], chunkSize = 500): Promise<any[]> => {
   return new Promise((resolve) => {
     const results: any[] = [];
     let i = 0;
@@ -842,10 +842,12 @@ export default function AuditTimeline() {
           const data = XLSX.utils.sheet_to_json(sheet);
           onComplete(data);
         } else { // CSV
+          // worker:true is intentionally omitted — PapaParse workers require their script to be
+          // served at a resolvable URL, which breaks in Next.js/Vercel bundled environments.
+          // Large-file performance is handled by processAuditDataChunked instead.
           Papa.parse(fileContent as string, {
             header: true,
             skipEmptyLines: true,
-            worker: true,
             complete: (results) => {
               if (results.errors.length) {
                 onError('Failed to parse CSV: ' + results.errors[0].message);
