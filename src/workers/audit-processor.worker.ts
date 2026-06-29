@@ -38,12 +38,13 @@ const processAuditData = (events: any[]): any[] => {
   return events
     .filter(event => {
       if (!audit) return true;
-      // Drop blank/corrupted rows — must have at least entity_name or created_timestamp
+      // Drop blank/corrupted rows (CSV fragments from multi-line payloads or a corrupt export).
+      // A real audit event always has an action AND an entity_name.
       const hasEntity = event.entity_name && String(event.entity_name).trim() !== '';
-      const hasTimestamp = event.created_timestamp && String(event.created_timestamp).trim() !== '';
-      return hasEntity || hasTimestamp;
+      const hasAction = event.action && String(event.action).trim() !== '';
+      return hasEntity && hasAction;
     })
-    .map(event => {
+    .map((event, index) => {
       let parsed_payload: any = null;
       let parsed_difference_list: any = null;
       let payload_updated_ts: string | null = null;
@@ -85,6 +86,9 @@ const processAuditData = (events: any[]): any[] => {
 
       return {
         ...event,
+        // Guaranteed-unique key so react-data-grid never collapses rows that share
+        // (or lack) an id/timestamp. Without this, fragment rows render blank.
+        _rowId: index,
         parsed_payload,
         parsed_difference_list,
         _searchable_text: null,

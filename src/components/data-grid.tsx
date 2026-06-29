@@ -30,14 +30,22 @@ interface SortConfig {
   direction: 'ASC' | 'DESC' | null;
 }
 
+let __genericRowCounter = 0;
 function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
-  return (row as any).id || 
-         (row as any).uuid || 
-         (row as any).created_timestamp || 
-         (row as any).entity_id || 
-         (row as any).tradeId || 
-         (row as any).TradeId || 
+  // _rowId is assigned during processing and is always unique — prevents react-data-grid
+  // from collapsing rows that share (or lack) an id/timestamp into blank rows.
+  if ((row as any)._rowId !== undefined) return (row as any)._rowId;
+  const key = (row as any).id ??
+         (row as any).uuid ??
+         (row as any).created_timestamp ??
+         (row as any).entity_id ??
+         (row as any).tradeId ??
+         (row as any).TradeId ??
          (row as any).PlannedObligationId;
+  if (key !== undefined && key !== null && key !== '') return key;
+  // Last-resort fallback for generic rows with no identifying field
+  if ((row as any).__k === undefined) (row as any).__k = `__row_${__genericRowCounter++}`;
+  return (row as any).__k;
 }
 
 const isJsonContent = (value: any): boolean => {

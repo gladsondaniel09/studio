@@ -686,6 +686,18 @@ export default function AuditTimeline() {
   const TIMELINE_PAGE_SIZE = 50;
   const [timelineLimit, setTimelineLimit] = useState(TIMELINE_PAGE_SIZE);
 
+  // Show a centered loader while switching views (heavy DataGrid/timeline mount)
+  const [isSwitchingView, setIsSwitchingView] = useState(false);
+  const switchView = (view: 'timeline' | 'table') => {
+    if (view === activeView) return;
+    setIsSwitchingView(true);
+    // Let the spinner paint one frame before the heavy synchronous render
+    requestAnimationFrame(() => {
+      setActiveView(view);
+      requestAnimationFrame(() => setIsSwitchingView(false));
+    });
+  };
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
@@ -1195,8 +1207,8 @@ export default function AuditTimeline() {
           <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
                 {dataType === 'audit' && (
                     <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
-                        <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
-                        <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
+                        <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => switchView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
+                        <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => switchView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
                     </div>
                 )}
                 <div className="relative flex-grow sm:flex-grow-0" id="search-bar">
@@ -1226,7 +1238,13 @@ export default function AuditTimeline() {
                 <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>
 
-          <div className='flex-grow min-h-0 flex flex-col gap-4 px-4 md:px-8 pb-4'>
+          <div className='flex-grow min-h-0 flex flex-col gap-4 px-4 md:px-8 pb-4 relative'>
+            {isSwitchingView && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-background/70 backdrop-blur-sm">
+                    <Loader className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm font-medium text-muted-foreground">Loading {activeView} view…</p>
+                </div>
+            )}
             {activeView === 'timeline' && dataType === 'audit' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
