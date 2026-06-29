@@ -1,6 +1,6 @@
 'use server';
 
-import { generateStructured } from '@/ai/anthropic';
+import { generateStructured } from '@/ai/gemini';
 import {
   type IncidentAnalysisInput,
   type IncidentAnalysisOutput,
@@ -47,8 +47,8 @@ export async function analyzeLogIncident(
       throw new Error('Input logs are empty.');
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not configured on the server.');
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not configured on the server.');
     }
 
     // Bound the input so we stay well within the context window.

@@ -1,6 +1,6 @@
 'use server';
 
-import { generateStructured } from '@/ai/anthropic';
+import { generateStructured } from '@/ai/gemini';
 import {
   type IncidentAnalysisInput,
   type ReplicationOutput,
@@ -51,8 +51,8 @@ export async function replicateIncident(
       throw new Error('Input logs are empty.');
     }
 
-    if (!process.env.ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY is not configured on the server.');
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not configured on the server.');
     }
 
     const logs =
