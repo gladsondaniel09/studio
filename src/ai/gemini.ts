@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import type { z } from 'zod';
 
 /**
@@ -8,7 +8,7 @@ import type { z } from 'zod';
  * Vercel project env vars). Create a free key at https://aistudio.google.com/apikey.
  */
 const apiKey = process.env.GEMINI_API_KEY ?? '';
-const genAI = new GoogleGenerativeAI(apiKey);
+const genAI = new GoogleGenAI({ apiKey });
 
 // gemini-2.5-flash is fast, capable, and available on the free tier.
 export const ANALYSIS_MODEL = 'gemini-2.5-flash';
@@ -27,21 +27,24 @@ export async function generateStructured<T>(opts: {
     throw new Error('GEMINI_API_KEY is not configured on the server.');
   }
 
-  const model = genAI.getGenerativeModel({
+  const response = await genAI.models.generateContent({
     model: ANALYSIS_MODEL,
-    systemInstruction: `${opts.system}
+    contents: opts.prompt,
+    config: {
+      systemInstruction: `${opts.system}
 
 OUTPUT FORMAT
 Respond with a SINGLE valid JSON object that conforms exactly to the schema described in the user message. Do not include any prose, explanation, or markdown code fences. Output only the raw JSON object.`,
-    generationConfig: {
       responseMimeType: 'application/json',
-      maxOutputTokens: opts.maxTokens ?? 16000,
+      // Disable "thinking" so the full token budget goes to the JSON answer
+      // (thinking tokens otherwise eat the budget and truncate the output).
+      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: opts.maxTokens ?? 32000,
       temperature: 0.2,
     },
   });
 
-  const result = await model.generateContent(opts.prompt);
-  const text = result.response.text()?.trim();
+  const text = response.text?.trim();
 
   if (!text) {
     throw new Error('The AI model did not return any text content.');
