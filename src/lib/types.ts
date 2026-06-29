@@ -45,7 +45,7 @@ export const IncidentAnalysisOutputSchema = z.object({
         entity_name: z.string().describe("The name of the entity involved."),
         action: z.string().describe("The action performed (Create, Update, Delete)."),
         description: z.string().describe("Forensic detail of what happened."),
-        changed_fields: z.string().optional().describe("A human-readable summary of fields that were updated (field: old -> new), joined into one string."),
+        changed_fields: z.string().nullable().optional().describe("A human-readable summary of fields that were updated (field: old -> new), joined into one string."),
         business_impact: z.string().describe("The impact this event has on the trade or accounting flow.")
     })).describe("Detailed chronological breakdown of the trade lifecycle."),
     steps_to_replicate: z.array(z.string()).describe("A list of steps to replicate the issue."),
@@ -60,6 +60,6 @@ export type IncidentAnalysisOutput = z.infer<typeof IncidentAnalysisOutputSchema
 export const ReplicationOutputSchema = z.object({
   replication_script: z.array(z.string()).describe("A step-by-step business process script to reproduce the issue in the CTRM system."),
   context_summary: z.string().describe("Brief context of the business scenario (e.g. Vessel name, Contract types)."),
-  expected_vs_actual: z.string().optional().describe("A comparison of the expected outcome versus the actual observed discrepancy."),
+  expected_vs_actual: z.string().nullable().optional().describe("A comparison of the expected outcome versus the actual observed discrepancy."),
 });
 export type ReplicationOutput = z.infer<typeof ReplicationOutputSchema>;
