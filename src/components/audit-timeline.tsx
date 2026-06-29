@@ -459,81 +459,9 @@ const getObjectValues = (obj: any): string => {
 };
 
 
-// Function to pre-process the raw data from the CSV
-const processAuditData = (events: any[]): any[] => {
-  return events.map(event => {
-    let parsed_payload: any = null;
-    let parsed_difference_list: any = null;
-    let payload_updated_ts: string | null = null;
-
-    if (event.payload && event.payload !== 'NULL') {
-        try {
-            parsed_payload = JSON.parse(event.payload);
-            payload_updated_ts = parsed_payload.updatedTimestamp || parsed_payload.updated_timestamp;
-
-            if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
-                parsed_difference_list = parsed_payload.differences;
-                if (!payload_updated_ts) {
-                    const uTs = parsed_payload.differences.find((d: any) => d.field === 'updatedTimestamp');
-                    if (uTs) payload_updated_ts = uTs.newValue;
-                }
-            }
-        } catch (e) {}
-    }
-
-    if (event.difference_list && event.difference_list !== 'NULL' && !parsed_difference_list) {
-        try {
-            parsed_difference_list = JSON.parse(event.difference_list);
-            if (Array.isArray(parsed_difference_list)) {
-                if (!payload_updated_ts) {
-                    const uTs = parsed_difference_list.find((d: any) => d.field === 'updatedTimestamp');
-                    if (uTs) payload_updated_ts = uTs.newValue;
-                }
-            }
-        } catch (e) {}
-    }
-
-    const business_timestamp = formatTimestamp(payload_updated_ts || event.created_timestamp);
-    const raw_business_time = getRawTime(payload_updated_ts || event.created_timestamp);
-
-    let display_user: string | null = null;
-    const actionLower = (event.action || '').toLowerCase();
-    if (actionLower.includes('create')) {
-        display_user = parsed_payload?.createdby || parsed_payload?.created_by || null;
-    } else if (actionLower.includes('update')) {
-        display_user = parsed_payload?.updatedby || parsed_payload?.updated_by || null;
-    }
-
-    return {
-      ...event,
-      parsed_payload,
-      parsed_difference_list,
-      // searchable_text is computed lazily on first search to avoid blocking the main thread at load time
-      _searchable_text: null as string | null,
-      business_timestamp,
-      raw_business_time,
-      display_user,
-    };
-  });
-};
-
-// Processes events in async chunks to keep the UI responsive during large file loads
-const processAuditDataChunked = (raw: any[], chunkSize = 500): Promise<any[]> => {
-  return new Promise((resolve) => {
-    const results: any[] = [];
-    let i = 0;
-    const next = () => {
-      results.push(...processAuditData(raw.slice(i, i + chunkSize)));
-      i += chunkSize;
-      if (i < raw.length) {
-        setTimeout(next, 0);
-      } else {
-        resolve(results);
-      }
-    };
-    next();
-  });
-};
+// NOTE: row pre-processing (JSON parsing, timestamp normalization, blank-row filtering)
+// now happens entirely inside src/workers/audit-processor.worker.ts so the main thread
+// is never blocked on large files. getObjectValues (above) is still used for lazy search.
 
 const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) => {
     return (
@@ -751,8 +679,13 @@ export default function AuditTimeline() {
   const [showTimelineWalkthrough, setShowTimelineWalkthrough] = useState(false);
   const [isProcessingFile, setIsProcessingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [processedCount, setProcessedCount] = useState(0);
   const [activeView, setActiveView] = useState<'timeline' | 'table'>('timeline');
-  
+
+  // Timeline view renders incrementally to avoid freezing on large datasets
+  const TIMELINE_PAGE_SIZE = 50;
+  const [timelineLimit, setTimelineLimit] = useState(TIMELINE_PAGE_SIZE);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
@@ -817,6 +750,7 @@ export default function AuditTimeline() {
       }
       setIsProcessingFile(true);
       setUploadProgress(0);
+      setProcessedCount(0);
 
       const isXlsx = file.type.includes('spreadsheetml') || file.name.endsWith('.xlsx');
       const isJson = file.type === 'application/json' || file.name.endsWith('.json');
@@ -899,6 +833,7 @@ export default function AuditTimeline() {
               const worker = new Worker(new URL('../workers/audit-processor.worker.ts', import.meta.url));
               worker.onmessage = (e) => {
                   if (e.data.type === 'PROGRESS') {
+                      setProcessedCount(e.data.count);
                       setUploadProgress(45 + Math.min(45, (e.data.count / 5000) * 45));
                   }
                   if (e.data.type === 'COMPLETE') { worker.terminate(); setUploadProgress(100); onProcessed(e.data.data); }
@@ -1064,6 +999,17 @@ export default function AuditTimeline() {
     return dataToFilter;
 
   }, [data, searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType]);
+
+  // Reset incremental timeline rendering whenever the filtered set changes
+  useEffect(() => {
+    setTimelineLimit(TIMELINE_PAGE_SIZE);
+  }, [searchTerm, selectedEntities, selectedActions, sortOrder, selectedFlowEntities, dataType, data]);
+
+  // Only the visible slice is rendered as timeline DOM nodes (prevents freeze on big files)
+  const visibleTimelineData = useMemo(
+    () => filteredData.slice(0, timelineLimit),
+    [filteredData, timelineLimit]
+  );
 
 
    const handleExport = () => {
@@ -1268,6 +1214,11 @@ export default function AuditTimeline() {
                     </>
                 )}
                 <div className="flex-grow"></div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted text-xs font-medium text-muted-foreground whitespace-nowrap">
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    {filteredData.length.toLocaleString()}
+                    {filteredData.length !== data.length && ` / ${data.length.toLocaleString()}`} records
+                </div>
                 <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
                     <Download className="mr-2 h-4 w-4" />
                     Download CSV
@@ -1279,7 +1230,7 @@ export default function AuditTimeline() {
             {activeView === 'timeline' && dataType === 'audit' ? (
                 <ScrollArea className="h-full">
                     <VerticalTimeline lineColor={'hsl(var(--border))'}>
-                    {filteredData.map((event, index) => {
+                    {visibleTimelineData.map((event, index) => {
                         const { business_timestamp, action, entity_name } = event;
                         if (!action) return null;
                         
@@ -1329,6 +1280,19 @@ export default function AuditTimeline() {
                         );
                     })}
                     </VerticalTimeline>
+                    {timelineLimit < filteredData.length && (
+                        <div className="flex flex-col items-center gap-2 py-6">
+                            <p className="text-xs text-muted-foreground">
+                                Showing {visibleTimelineData.length} of {filteredData.length} events
+                            </p>
+                            <Button
+                                variant="secondary"
+                                onClick={() => setTimelineLimit(prev => prev + TIMELINE_PAGE_SIZE)}
+                            >
+                                Load More
+                            </Button>
+                        </div>
+                    )}
                 </ScrollArea>
             ) : (
                 <DataGrid data={filteredData} columns={columns} dataType={dataType!} />
@@ -1366,6 +1330,11 @@ export default function AuditTimeline() {
                             <div className='space-y-2'>
                                 <p className="text-sm font-medium text-muted-foreground text-center">Processing: {fileName}</p>
                                 <Progress value={uploadProgress} className="w-full" />
+                                <p className="text-xs text-muted-foreground text-center">
+                                    {processedCount > 0
+                                        ? `${processedCount.toLocaleString()} rows loaded…`
+                                        : 'Reading file…'}
+                                </p>
                             </div>
                         )}
                     </div>
