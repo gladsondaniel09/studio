@@ -39,7 +39,9 @@ import { useToast } from '@/hooks/use-toast';
 import FlowChart from './flow-chart';
 import { ThemeToggle } from './theme-toggle';
 import { Walkthrough, type Step } from './walkthrough';
-import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput, type ReplicationOutput } from '@/lib/types';
+import { AuditEvent, SampleEventSchema, type IncidentAnalysisOutput, type ReplicationOutput, type InvestigationContext } from '@/lib/types';
+import { Textarea } from './ui/textarea';
+import { Label } from './ui/label';
 import { format } from 'date-fns';
 import { analyzeLogIncident } from '@/ai/flows/analyze-log-incident-flow';
 import { replicateIncident } from '@/ai/flows/replicate-incident-flow';
@@ -463,6 +465,30 @@ const getObjectValues = (obj: any): string => {
 // now happens entirely inside src/workers/audit-processor.worker.ts so the main thread
 // is never blocked on large files. getObjectValues (above) is still used for lazy search.
 
+const confidenceBadge = (level: string | undefined) => {
+    if (!level) return null;
+    return (
+        <span className={cn(
+            "text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide",
+            level === 'High' ? "bg-green-50 text-green-700 border-green-200" :
+            level === 'Medium' ? "bg-amber-50 text-amber-700 border-amber-200" :
+            "bg-red-50 text-red-700 border-red-200"
+        )}>{level} confidence</span>
+    );
+};
+
+const evidenceTypeBadge = (type: string | undefined) => {
+    if (!type) return null;
+    return (
+        <span className={cn(
+            "text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide",
+            type === 'FACT' ? "bg-green-50 text-green-700 border-green-200" :
+            type === 'INFERRED' ? "bg-amber-50 text-amber-700 border-amber-200" :
+            "bg-red-50 text-red-700 border-red-200"
+        )}>{type}</span>
+    );
+};
+
 const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) => {
     return (
         <Card className="mt-4 border-primary/20 shadow-md">
@@ -471,11 +497,19 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                     <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                         <ShieldCheck className="w-6 h-6 text-primary" />
                     </span>
-                    <div className="space-y-1">
-                        <span className="text-xl font-headline block">{result.title}</span>
+                    <div className="space-y-1 flex-grow">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xl font-headline">{result.title}</span>
+                            {result.root_cause_confidence && confidenceBadge(result.root_cause_confidence)}
+                        </div>
                         <CardDescription className="text-sm font-medium text-foreground/70">
                             {result.summary}
                         </CardDescription>
+                        {result.root_cause_evidence && (
+                            <p className="text-xs text-muted-foreground bg-background/60 border rounded px-2 py-1 mt-1 font-mono">
+                                <span className="font-bold text-foreground">Evidence: </span>{result.root_cause_evidence}
+                            </p>
+                        )}
                     </div>
                 </CardTitle>
             </CardHeader>
@@ -490,8 +524,18 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                     <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1px] before:bg-border">
                         {result.lifecycle_breakdown.map((step, i) => (
                             <div key={i} className="relative pl-8">
-                                <div className="absolute left-0 top-1 w-6 h-6 rounded-full bg-background border-2 border-primary flex items-center justify-center z-10">
-                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                <div className={cn(
+                                    "absolute left-0 top-1 w-6 h-6 rounded-full border-2 flex items-center justify-center z-10",
+                                    step.evidence_type === 'MISSING' ? "bg-red-50 border-red-400" :
+                                    step.evidence_type === 'INFERRED' ? "bg-amber-50 border-amber-400" :
+                                    "bg-background border-primary"
+                                )}>
+                                    <div className={cn(
+                                        "w-2 h-2 rounded-full",
+                                        step.evidence_type === 'MISSING' ? "bg-red-400" :
+                                        step.evidence_type === 'INFERRED' ? "bg-amber-400" :
+                                        "bg-primary"
+                                    )} />
                                 </div>
                                 <div className="space-y-2 bg-muted/30 p-3 rounded-lg border border-border/50">
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -506,6 +550,8 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                                         )}>
                                             {step.action}
                                         </span>
+                                        {evidenceTypeBadge(step.evidence_type)}
+                                        {confidenceBadge(step.confidence)}
                                     </div>
                                     <p className="text-sm font-medium leading-relaxed">{step.description}</p>
                                     <div className="flex flex-col gap-1">
@@ -579,6 +625,25 @@ const AnalysisResultDisplay = ({ result }: { result: IncidentAnalysisOutput }) =
                         </div>
                     </div>
                 </div>
+
+                {/* Evidence Gaps Section */}
+                {result.evidence_gaps && result.evidence_gaps.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+                        <h4 className="font-bold flex items-center gap-2 text-amber-700 uppercase text-xs tracking-widest">
+                            <HelpCircle className="w-4 h-4" />
+                            Evidence Gaps — Additional Collection Required
+                        </h4>
+                        <div className="space-y-3">
+                            {result.evidence_gaps.map((gap, i) => (
+                                <div key={i} className="bg-white border border-amber-100 rounded-md p-3 space-y-1">
+                                    <p className="text-sm font-bold text-amber-800">{gap.missing_evidence}</p>
+                                    <p className="text-xs text-muted-foreground"><span className="font-semibold">Why needed:</span> {gap.why_needed}</p>
+                                    <p className="text-xs text-muted-foreground"><span className="font-semibold">How to collect:</span> {gap.how_to_collect}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <Accordion type="single" collapsible className="w-full pt-4">
                     <AccordionItem value="raw-json" className="border-none">
@@ -705,6 +770,13 @@ export default function AuditTimeline() {
   const [isReplicating, setIsReplicating] = useState(false);
   const [replicationResult, setReplicationResult] = useState<ReplicationOutput | null>(null);
   const [showReplicateDialog, setShowReplicateDialog] = useState(false);
+
+  // Investigation context form
+  const [showContextForm, setShowContextForm] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'analyse' | 'replicate' | null>(null);
+  const [investigationContext, setInvestigationContext] = useState<InvestigationContext>({
+    customer: '', symptom: '', affectedEntityIds: '', dateRange: '',
+  });
 
   // For controlled event expansion with navigation
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -885,74 +957,79 @@ export default function AuditTimeline() {
       );
   }
 
-    const handleAnalyze = async () => {
+    const handleAnalyze = () => {
         if (filteredData.length === 0) {
             toast({ variant: 'destructive', title: 'No Data to Analyze', description: 'There are no logs in the current view to analyze.' });
             return;
         }
-
-        setIsAnalyzing(true);
-        setAnalysisResult(null);
-        setShowAnalysisDialog(true);
-
-        try {
-            const dataForAnalysis = filteredData.slice(0, 100);
-            const logString = dataForAnalysis.map(e => JSON.stringify({
-                timestamp: e.business_timestamp || e.created_timestamp,
-                action: e.action,
-                entity: e.entity_name,
-                entity_id: e.entity_id,
-                parent_id: e.parent_id,
-                table_name: e.table_name,
-                user: e.display_user,
-                payload: e.payload !== 'NULL' ? e.payload : undefined,
-                differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
-            }, (key, value) => value === undefined ? undefined : value)).join('\n');
-
-            // Keep the payload under Vercel's function-payload limit; the server
-            // truncates to 200k chars anyway, so trim here before sending.
-            const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
-            const result = await analyzeLogIncident({ logs: trimmedLogs });
-            setAnalysisResult(result);
-        } catch (e: any) {
-            console.error(e);
-            toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred during analysis.' });
-            setShowAnalysisDialog(false);
-        } finally {
-            setIsAnalyzing(false);
-        }
+        setPendingAction('analyse');
+        setShowContextForm(true);
     };
 
-    const handleReplicate = async () => {
+    const handleReplicate = () => {
         if (filteredData.length === 0) {
             toast({ variant: 'destructive', title: 'No Data for Replication', description: 'There are no logs in the current view to process.' });
             return;
         }
+        setPendingAction('replicate');
+        setShowContextForm(true);
+    };
 
-        setIsReplicating(true);
-        setReplicationResult(null);
-        setShowReplicateDialog(true);
+    const handleRunWithContext = async () => {
+        setShowContextForm(false);
+        const ctx = investigationContext;
 
-        try {
-            const dataForReplication = filteredData.slice(0, 100);
-            const logString = dataForReplication.map(e => JSON.stringify({
-                timestamp: e.business_timestamp || e.created_timestamp,
-                action: e.action,
-                entity: e.entity_name,
-                details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
-            })).join('\n');
+        if (pendingAction === 'analyse') {
+            setIsAnalyzing(true);
+            setAnalysisResult(null);
+            setShowAnalysisDialog(true);
+            try {
+                const dataForAnalysis = filteredData.slice(0, 100);
+                const logString = dataForAnalysis.map(e => JSON.stringify({
+                    timestamp: e.business_timestamp || e.created_timestamp,
+                    action: e.action,
+                    entity: e.entity_name,
+                    entity_id: e.entity_id,
+                    parent_id: e.parent_id,
+                    table_name: e.table_name,
+                    user: e.display_user,
+                    payload: e.payload !== 'NULL' ? e.payload : undefined,
+                    differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
+                }, (key, value) => value === undefined ? undefined : value)).join('\n');
+                const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
+                const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
+                setAnalysisResult(result);
+            } catch (e: any) {
+                console.error(e);
+                toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred during analysis.' });
+                setShowAnalysisDialog(false);
+            } finally {
+                setIsAnalyzing(false);
+            }
+        }
 
-            // Keep the payload under Vercel's function-payload limit; the server
-            // truncates to 200k chars anyway, so trim here before sending.
-            const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
-            const result = await replicateIncident({ logs: trimmedLogs });
-            setReplicationResult(result);
-        } catch (e: any) {
-            console.error(e);
-            toast({ variant: 'destructive', title: 'Replication Failed', description: e.message || 'Failed to generate replication steps.' });
-            setShowReplicateDialog(false);
-        } finally {
-            setIsReplicating(false);
+        if (pendingAction === 'replicate') {
+            setIsReplicating(true);
+            setReplicationResult(null);
+            setShowReplicateDialog(true);
+            try {
+                const dataForReplication = filteredData.slice(0, 100);
+                const logString = dataForReplication.map(e => JSON.stringify({
+                    timestamp: e.business_timestamp || e.created_timestamp,
+                    action: e.action,
+                    entity: e.entity_name,
+                    details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
+                })).join('\n');
+                const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
+                const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
+                setReplicationResult(result);
+            } catch (e: any) {
+                console.error(e);
+                toast({ variant: 'destructive', title: 'Replication Failed', description: e.message || 'Failed to generate replication steps.' });
+                setShowReplicateDialog(false);
+            } finally {
+                setIsReplicating(false);
+            }
         }
     };
 
@@ -1093,6 +1170,43 @@ export default function AuditTimeline() {
             isOpen={showTimelineWalkthrough}
             onClose={() => setShowTimelineWalkthrough(false)}
           />}
+           {/* Investigation Context Form */}
+           <Dialog open={showContextForm} onOpenChange={setShowContextForm}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <ShieldCheck className="w-5 h-5 text-primary" />
+                            Start Investigation
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <p className="text-sm text-muted-foreground">Provide context about the customer issue. This helps the AI anchor its analysis to the reported symptom rather than summarizing logs generically. All fields are optional.</p>
+                        <div className="space-y-2">
+                            <Label htmlFor="ctx-customer">Customer / Tenant</Label>
+                            <Input id="ctx-customer" placeholder="e.g. Acme Trading Ltd" value={investigationContext.customer ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, customer: e.target.value }))} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="ctx-symptom">Reported Symptom <span className="text-primary font-bold">*</span></Label>
+                            <Textarea id="ctx-symptom" placeholder="e.g. Invoice posted at wrong quantity — shows 20,000 MT but should be 19,847 MT after BL split" rows={3} value={investigationContext.symptom ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, symptom: e.target.value }))} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="ctx-ids">Affected Entity IDs</Label>
+                            <Input id="ctx-ids" placeholder="e.g. T-1042, OBL-887-A, BL-2024-0321" value={investigationContext.affectedEntityIds ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, affectedEntityIds: e.target.value }))} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="ctx-date">Incident Date / Time Range</Label>
+                            <Input id="ctx-date" placeholder="e.g. 2026-06-20 14:00 to 15:30 UTC" value={investigationContext.dateRange ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, dateRange: e.target.value }))} />
+                        </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                        <Button variant="outline" className="flex-1" onClick={() => setShowContextForm(false)}>Cancel</Button>
+                        <Button className="flex-1" onClick={handleRunWithContext}>
+                            {pendingAction === 'analyse' ? <><Sparkles className="mr-2 h-4 w-4" />Run Forensic Analyse</> : <><TestTube2 className="mr-2 h-4 w-4" />Run Replicate</>}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-5xl h-[90vh]">
                     <DialogHeader><DialogTitle>Forensic Trade Lifecycle Analysis</DialogTitle></DialogHeader>

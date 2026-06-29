@@ -30,8 +30,19 @@ const SortEventsOutputSchema = z.object({
 export type SortEventsOutput = z.infer<typeof SortEventsOutputSchema>;
 
 
+// Optional investigation context provided by the engineer before running analysis.
+export const InvestigationContextSchema = z.object({
+  customer: z.string().optional().describe('Customer or tenant name.'),
+  symptom: z.string().optional().describe('The reported symptom or issue description from the customer.'),
+  affectedEntityIds: z.string().optional().describe('Comma-separated list of affected Trade IDs, Obligation IDs, etc.'),
+  dateRange: z.string().optional().describe('Approximate incident date/time range (e.g. "2026-06-20 14:00 to 15:30").'),
+});
+export type InvestigationContext = z.infer<typeof InvestigationContextSchema>;
+
+
 export const IncidentAnalysisInputSchema = z.object({
   logs: z.string().describe('A string containing the audit logs to be analyzed.'),
+  context: InvestigationContextSchema.optional().describe('Optional investigation context provided by the engineer.'),
 });
 export type IncidentAnalysisInput = z.infer<typeof IncidentAnalysisInputSchema>;
 
@@ -39,11 +50,15 @@ export type IncidentAnalysisInput = z.infer<typeof IncidentAnalysisInputSchema>;
 export const IncidentAnalysisOutputSchema = z.object({
     title: z.string().describe("A concise title for the identified issue."),
     summary: z.string().describe("A brief summary of the problem."),
+    root_cause_confidence: z.enum(['High', 'Medium', 'Low']).describe("Confidence level in the root cause finding."),
+    root_cause_evidence: z.string().describe("Specific log entries or patterns that support the root cause finding."),
     lifecycle_breakdown: z.array(z.object({
         timestamp: z.string().describe("Timestamp from log."),
         lifecycle_phase: z.string().describe("The phase of the trade lifecycle (e.g. Planning, Actualization)."),
         entity_name: z.string().describe("The name of the entity involved."),
         action: z.string().describe("The action performed (Create, Update, Delete)."),
+        evidence_type: z.enum(['FACT', 'INFERRED', 'MISSING']).describe("FACT=directly in logs, INFERRED=deduced from evidence, MISSING=expected but absent."),
+        confidence: z.enum(['High', 'Medium', 'Low']).describe("Confidence level for this event."),
         description: z.string().describe("Forensic detail of what happened."),
         changed_fields: z.string().nullable().optional().describe("A human-readable summary of fields that were updated (field: old -> new), joined into one string."),
         business_impact: z.string().describe("The impact this event has on the trade or accounting flow.")
@@ -54,6 +69,11 @@ export const IncidentAnalysisOutputSchema = z.object({
     potential_cause: z.string().describe("The likely technical cause of the issue."),
     recommended_fix: z.string().describe("Recommended steps to fix the issue."),
     final_trade_state: z.string().describe("The state the trade is left in at the end of the logs."),
+    evidence_gaps: z.array(z.object({
+        missing_evidence: z.string().describe("What additional evidence is missing."),
+        why_needed: z.string().describe("Why this evidence would help the investigation."),
+        how_to_collect: z.string().describe("How to collect this evidence in Xceler or from the system."),
+    })).describe("List of additional evidence that would increase confidence in the findings."),
 });
 export type IncidentAnalysisOutput = z.infer<typeof IncidentAnalysisOutputSchema>;
 

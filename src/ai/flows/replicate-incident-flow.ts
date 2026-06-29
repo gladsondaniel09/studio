@@ -43,6 +43,19 @@ Style:
 
 Only use evidence present in the logs. Do not invent values.`;
 
+function buildCaseBrief(input: IncidentAnalysisInput): string {
+  const ctx = input.context;
+  if (!ctx || (!ctx.customer && !ctx.symptom && !ctx.affectedEntityIds && !ctx.dateRange)) {
+    return '';
+  }
+  const lines = ['CASE BRIEF:'];
+  if (ctx.customer) lines.push(`- Customer / Tenant: ${ctx.customer}`);
+  if (ctx.symptom) lines.push(`- Reported symptom: ${ctx.symptom}`);
+  if (ctx.affectedEntityIds) lines.push(`- Affected entity IDs: ${ctx.affectedEntityIds}`);
+  if (ctx.dateRange) lines.push(`- Incident window: ${ctx.dateRange}`);
+  return lines.join('\n');
+}
+
 export async function replicateIncident(
   input: IncidentAnalysisInput
 ): Promise<ReplicationOutput> {
@@ -60,13 +73,15 @@ export async function replicateIncident(
         ? input.logs.slice(0, 200000) + '\n[TRUNCATED]'
         : input.logs;
 
+    const caseBrief = buildCaseBrief(input);
+
     return await generateStructured({
       system: SYSTEM_PROMPT,
       schema: ReplicationOutputSchema,
-      prompt: `Generate a detailed business-process replication script from the following audit logs.
+      prompt: `${caseBrief ? caseBrief + '\n\n' : ''}Generate a detailed business-process replication script from the following audit logs. Every step must cite exact values (quantities, IDs, dates, vessel names) extracted from the logs. If a value is not in the logs, write [NOT IN LOGS — engineer must verify].
 
 Return a JSON object with these fields:
-- replication_script: array of strings (each an ordered step)
+- replication_script: array of strings (each an ordered step with log references)
 - context_summary (string)
 - expected_vs_actual (optional string)
 
