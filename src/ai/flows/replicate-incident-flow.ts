@@ -1,7 +1,6 @@
 'use server';
 
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { anthropic, ANALYSIS_MODEL } from '@/ai/anthropic';
+import { generateStructured } from '@/ai/anthropic';
 import {
   type IncidentAnalysisInput,
   type ReplicationOutput,
@@ -61,28 +60,19 @@ export async function replicateIncident(
         ? input.logs.slice(0, 200000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const response = await anthropic.messages.parse({
-      model: ANALYSIS_MODEL,
-      max_tokens: 16000,
-      thinking: { type: 'adaptive' },
+    return await generateStructured({
       system: SYSTEM_PROMPT,
-      output_config: {
-        format: zodOutputFormat(ReplicationOutputSchema),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: `Generate a detailed business-process replication script from the following audit logs.\n\nLogs:\n${logs}`,
-        },
-      ],
+      schema: ReplicationOutputSchema,
+      prompt: `Generate a detailed business-process replication script from the following audit logs.
+
+Return a JSON object with these fields:
+- replication_script: array of strings (each an ordered step)
+- context_summary (string)
+- expected_vs_actual (optional string)
+
+Logs:
+${logs}`,
     });
-
-    const output = response.parsed_output;
-    if (!output) {
-      throw new Error('The AI model did not return any replication content.');
-    }
-
-    return output;
   } catch (error: any) {
     console.error('[REPLICATION_FLOW_ERROR]', error);
     throw new Error(error.message || 'Replication logic failed.');

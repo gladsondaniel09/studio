@@ -1,7 +1,6 @@
 'use server';
 
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { anthropic, ANALYSIS_MODEL } from '@/ai/anthropic';
+import { generateStructured } from '@/ai/anthropic';
 import {
   type IncidentAnalysisInput,
   type IncidentAnalysisOutput,
@@ -58,28 +57,25 @@ export async function analyzeLogIncident(
         ? input.logs.slice(0, 200000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const response = await anthropic.messages.parse({
-      model: ANALYSIS_MODEL,
-      max_tokens: 16000,
-      thinking: { type: 'adaptive' },
+    return await generateStructured({
       system: SYSTEM_PROMPT,
-      output_config: {
-        format: zodOutputFormat(IncidentAnalysisOutputSchema),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze the following audit logs and reconstruct the full trade lifecycle.\n\nLogs:\n${logs}`,
-        },
-      ],
+      schema: IncidentAnalysisOutputSchema,
+      prompt: `Analyze the following audit logs and reconstruct the full trade lifecycle.
+
+Return a JSON object with these fields:
+- title (string)
+- summary (string)
+- lifecycle_breakdown: array of { timestamp, lifecycle_phase, entity_name, action, description, changed_fields (optional string), business_impact }
+- steps_to_replicate: array of strings
+- observed_behavior (string)
+- expected_behavior (string)
+- potential_cause (string)
+- recommended_fix (string)
+- final_trade_state (string)
+
+Logs:
+${logs}`,
     });
-
-    const output = response.parsed_output;
-    if (!output) {
-      throw new Error('The AI model did not return any structured content.');
-    }
-
-    return output;
   } catch (error: any) {
     console.error('[ANALYSIS_FLOW_ERROR]', error);
     throw new Error(error.message || 'Analysis failed due to an internal AI error.');
