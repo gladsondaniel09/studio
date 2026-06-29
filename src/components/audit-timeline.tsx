@@ -908,8 +908,11 @@ export default function AuditTimeline() {
                 payload: e.payload !== 'NULL' ? e.payload : undefined,
                 differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
             }, (key, value) => value === undefined ? undefined : value)).join('\n');
-            
-            const result = await analyzeLogIncident({ logs: logString });
+
+            // Keep the payload under Vercel's function-payload limit; the server
+            // truncates to 200k chars anyway, so trim here before sending.
+            const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
+            const result = await analyzeLogIncident({ logs: trimmedLogs });
             setAnalysisResult(result);
         } catch (e: any) {
             console.error(e);
@@ -938,8 +941,11 @@ export default function AuditTimeline() {
                 entity: e.entity_name,
                 details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
             })).join('\n');
-            
-            const result = await replicateIncident({ logs: logString });
+
+            // Keep the payload under Vercel's function-payload limit; the server
+            // truncates to 200k chars anyway, so trim here before sending.
+            const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
+            const result = await replicateIncident({ logs: trimmedLogs });
             setReplicationResult(result);
         } catch (e: any) {
             console.error(e);
