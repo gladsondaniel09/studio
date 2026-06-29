@@ -87,10 +87,10 @@ const getRawTime = (ts: string | undefined): number => {
 export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
-    searchable_text: string;
-    business_timestamp: string; // This is the primary TIMESTAMP column
-    raw_business_time: number;   // For sorting
-    display_user: string | null; // Forensic user from payload
+    _searchable_text: string | null; // Lazily computed on first search
+    business_timestamp: string;
+    raw_business_time: number;
+    display_user: string | null;
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -227,7 +227,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_user, ...otherDetails } = event;
+        const { created_timestamp, entity_name, action: evtAction, user, _searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_user, ...otherDetails } = event;
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
@@ -464,19 +464,13 @@ const processAuditData = (events: any[]): any[] => {
   return events.map(event => {
     let parsed_payload: any = null;
     let parsed_difference_list: any = null;
-    let searchable_text = getObjectValues(event).toLowerCase();
-    
     let payload_updated_ts: string | null = null;
 
     if (event.payload && event.payload !== 'NULL') {
         try {
             parsed_payload = JSON.parse(event.payload);
-            searchable_text += ' ' + getObjectValues(parsed_payload).toLowerCase();
-
-            // Prioritize payload updatedTimestamp as requested
             payload_updated_ts = parsed_payload.updatedTimestamp || parsed_payload.updated_timestamp;
 
-            // Check differences array if present
             if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
                 parsed_difference_list = parsed_payload.differences;
                 if (!payload_updated_ts) {
@@ -490,8 +484,6 @@ const processAuditData = (events: any[]): any[] => {
     if (event.difference_list && event.difference_list !== 'NULL' && !parsed_difference_list) {
         try {
             parsed_difference_list = JSON.parse(event.difference_list);
-            searchable_text += ' ' + getObjectValues(parsed_difference_list).toLowerCase();
-            
             if (Array.isArray(parsed_difference_list)) {
                 if (!payload_updated_ts) {
                     const uTs = parsed_difference_list.find((d: any) => d.field === 'updatedTimestamp');
@@ -501,11 +493,9 @@ const processAuditData = (events: any[]): any[] => {
         } catch (e) {}
     }
 
-    // TIMESTAMP column logic: Use payload updatedTimestamp, fallback to CSV created_timestamp
     const business_timestamp = formatTimestamp(payload_updated_ts || event.created_timestamp);
     const raw_business_time = getRawTime(payload_updated_ts || event.created_timestamp);
 
-    // USER column logic: If CREATE, use createdby. If UPDATE, use updatedby. Else null.
     let display_user: string | null = null;
     const actionLower = (event.action || '').toLowerCase();
     if (actionLower.includes('create')) {
@@ -518,11 +508,30 @@ const processAuditData = (events: any[]): any[] => {
       ...event,
       parsed_payload,
       parsed_difference_list,
-      searchable_text,
-      business_timestamp, 
-      raw_business_time,   
+      // searchable_text is computed lazily on first search to avoid blocking the main thread at load time
+      _searchable_text: null as string | null,
+      business_timestamp,
+      raw_business_time,
       display_user,
     };
+  });
+};
+
+// Processes events in async chunks to keep the UI responsive during large file loads
+const processAuditDataChunked = (raw: any[], chunkSize = 2000): Promise<any[]> => {
+  return new Promise((resolve) => {
+    const results: any[] = [];
+    let i = 0;
+    const next = () => {
+      results.push(...processAuditData(raw.slice(i, i + chunkSize)));
+      i += chunkSize;
+      if (i < raw.length) {
+        setTimeout(next, 0);
+      } else {
+        resolve(results);
+      }
+    };
+    next();
   });
 };
 
@@ -827,7 +836,7 @@ export default function AuditTimeline() {
             onError('JSON file must contain an array of objects.');
           }
         } else if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
-          const workbook = XLSX.read(fileContent, { type: 'binary' });
+          const workbook = XLSX.read(new Uint8Array(fileContent as ArrayBuffer), { type: 'array' });
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
           const data = XLSX.utils.sheet_to_json(sheet);
@@ -836,6 +845,7 @@ export default function AuditTimeline() {
           Papa.parse(fileContent as string, {
             header: true,
             skipEmptyLines: true,
+            worker: true,
             complete: (results) => {
               if (results.errors.length) {
                 onError('Failed to parse CSV: ' + results.errors[0].message);
@@ -854,7 +864,7 @@ export default function AuditTimeline() {
     reader.onerror = () => onError('Failed to read file.');
     
     if (file.type.includes('spreadsheetml')) {
-      reader.readAsBinaryString(file);
+      reader.readAsArrayBuffer(file);
     } else {
       reader.readAsText(file);
     }
@@ -880,23 +890,24 @@ export default function AuditTimeline() {
           const firstRow = results[0];
           const headers = Object.keys(firstRow);
           const isAuditLog = ['created_timestamp', 'action', 'entity_name'].every(h => headers.includes(h));
-          
-          const processedData = processAuditData(results);
-          setData(processedData);
 
-          if (isAuditLog) {
-              setDataType('audit');
-              setActiveView('timeline');
-              setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
-          } else {
-              const fileColumns = headers.map(header => ({ key: header, name: header.toUpperCase(), resizable: true }));
-              setColumns(fileColumns);
-              setDataType('generic');
-              setActiveView('table');
-          }
+          processAuditDataChunked(results).then((processedData) => {
+              setData(processedData);
 
-          setView('timeline');
-          setTimeout(() => setIsProcessingFile(false), 500);
+              if (isAuditLog) {
+                  setDataType('audit');
+                  setActiveView('timeline');
+                  setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
+              } else {
+                  const fileColumns = headers.map(header => ({ key: header, name: header.toUpperCase(), resizable: true }));
+                  setColumns(fileColumns);
+                  setDataType('generic');
+                  setActiveView('table');
+              }
+
+              setView('timeline');
+              setIsProcessingFile(false);
+          });
 
       }, (errorMsg) => {
           setError(errorMsg);
@@ -1039,8 +1050,12 @@ export default function AuditTimeline() {
       }
       
       if (!searchTerm) return true;
-      
-      return event.searchable_text.includes(lowerCaseSearchTerm);
+
+      // Compute _searchable_text lazily on first search to avoid blocking the main thread at load time
+      if (!event._searchable_text) {
+        event._searchable_text = getObjectValues(event).toLowerCase();
+      }
+      return event._searchable_text.includes(lowerCaseSearchTerm);
     });
 
     if (dataType === 'audit') {
