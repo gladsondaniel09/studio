@@ -810,68 +810,6 @@ export default function AuditTimeline() {
     }
   };
 
-  const parseFile = (file: File, onComplete: (results: any[]) => void, onError: (error: string) => void) => {
-    const reader = new FileReader();
-    
-    reader.onprogress = (event) => {
-      if (event.lengthComputable) {
-        const progress = (event.loaded / event.total) * 100;
-        setUploadProgress(progress);
-      }
-    };
-
-    reader.onload = (event) => {
-      try {
-        const fileContent = event.target?.result;
-        if (!fileContent) {
-          onError('File content is empty.');
-          return;
-        }
-
-        if (file.type === 'application/json') {
-          const jsonData = JSON.parse(fileContent as string);
-          if (Array.isArray(jsonData)) {
-            onComplete(jsonData);
-          } else {
-            onError('JSON file must contain an array of objects.');
-          }
-        } else if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
-          const workbook = XLSX.read(new Uint8Array(fileContent as ArrayBuffer), { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const data = XLSX.utils.sheet_to_json(sheet);
-          onComplete(data);
-        } else { // CSV
-          // worker:true is intentionally omitted — PapaParse workers require their script to be
-          // served at a resolvable URL, which breaks in Next.js/Vercel bundled environments.
-          // Large-file performance is handled by processAuditDataChunked instead.
-          Papa.parse(fileContent as string, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-              if (results.errors.length) {
-                onError('Failed to parse CSV: ' + results.errors[0].message);
-              } else {
-                onComplete(results.data);
-              }
-            },
-            error: (err: any) => onError('Failed to parse CSV file: ' + err.message),
-          });
-        }
-      } catch (e: any) {
-        onError('Failed to read file: ' + e.message);
-      }
-    };
-
-    reader.onerror = () => onError('Failed to read file.');
-    
-    if (file.type.includes('spreadsheetml')) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
-  }
-
   const handleViewTimeline = () => {
       if (!file) {
           setError('Please select a file first.');
@@ -880,42 +818,97 @@ export default function AuditTimeline() {
       setIsProcessingFile(true);
       setUploadProgress(0);
 
-      parseFile(file, (results) => {
-          setUploadProgress(100);
-          if (results.length === 0) {
+      const isXlsx = file.type.includes('spreadsheetml') || file.name.endsWith('.xlsx');
+      const isJson = file.type === 'application/json' || file.name.endsWith('.json');
+
+      const onProcessed = (processedData: any[]) => {
+          if (processedData.length === 0) {
               setError('File is empty or could not be parsed.');
               setView('upload');
               setIsProcessingFile(false);
               return;
           }
-          
-          const firstRow = results[0];
-          const headers = Object.keys(firstRow);
+          const firstRow = processedData[0];
+          const headers = Object.keys(firstRow).filter(k => !k.startsWith('_') && k !== 'parsed_payload' && k !== 'parsed_difference_list' && k !== 'business_timestamp' && k !== 'raw_business_time' && k !== 'display_user');
           const isAuditLog = ['created_timestamp', 'action', 'entity_name'].every(h => headers.includes(h));
+          setData(processedData);
+          if (isAuditLog) {
+              setDataType('audit');
+              setActiveView('timeline');
+              setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
+          } else {
+              const fileColumns = headers.map(header => ({ key: header, name: header.toUpperCase(), resizable: true }));
+              setColumns(fileColumns);
+              setDataType('generic');
+              setActiveView('table');
+          }
+          setView('timeline');
+          setIsProcessingFile(false);
+      };
 
-          processAuditDataChunked(results).then((processedData) => {
-              setData(processedData);
-
-              if (isAuditLog) {
-                  setDataType('audit');
-                  setActiveView('timeline');
-                  setColumns(AUDIT_LOG_COLUMNS.map(c => ({...c, resizable: true})));
-              } else {
-                  const fileColumns = headers.map(header => ({ key: header, name: header.toUpperCase(), resizable: true }));
-                  setColumns(fileColumns);
-                  setDataType('generic');
-                  setActiveView('table');
-              }
-
-              setView('timeline');
-              setIsProcessingFile(false);
-          });
-
-      }, (errorMsg) => {
-          setError(errorMsg);
+      const onError = (msg: string) => {
+          setError(msg);
           setView('upload');
           setIsProcessingFile(false);
-      });
+      };
+
+      if (isXlsx || isJson) {
+          // For XLSX/JSON: read on main thread (unavoidable), then offload processing to worker
+          const reader = new FileReader();
+          reader.onprogress = (event) => {
+              if (event.lengthComputable) setUploadProgress((event.loaded / event.total) * 50);
+          };
+          reader.onload = (event) => {
+              try {
+                  const fileContent = event.target?.result;
+                  if (!fileContent) { onError('File content is empty.'); return; }
+                  let rawRows: any[] = [];
+                  if (isJson) {
+                      const jsonData = JSON.parse(fileContent as string);
+                      if (!Array.isArray(jsonData)) { onError('JSON file must contain an array of objects.'); return; }
+                      rawRows = jsonData;
+                  } else {
+                      const workbook = XLSX.read(new Uint8Array(fileContent as ArrayBuffer), { type: 'array' });
+                      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                      rawRows = XLSX.utils.sheet_to_json(sheet);
+                  }
+                  setUploadProgress(60);
+                  const worker = new Worker(new URL('../workers/audit-processor.worker.ts', import.meta.url));
+                  worker.onmessage = (e) => {
+                      if (e.data.type === 'COMPLETE') { worker.terminate(); setUploadProgress(100); onProcessed(e.data.data); }
+                      if (e.data.type === 'ERROR') { worker.terminate(); onError(e.data.message); }
+                  };
+                  worker.onerror = (e) => { worker.terminate(); onError('Worker error: ' + e.message); };
+                  worker.postMessage({ type: 'PROCESS_ROWS', rows: rawRows });
+              } catch (e: any) { onError('Failed to read file: ' + e.message); }
+          };
+          reader.onerror = () => onError('Failed to read file.');
+          isXlsx ? reader.readAsArrayBuffer(file) : reader.readAsText(file);
+      } else {
+          // CSV: read as text then hand entire string to worker — all parsing + processing off main thread
+          const reader = new FileReader();
+          reader.onprogress = (event) => {
+              if (event.lengthComputable) setUploadProgress((event.loaded / event.total) * 40);
+          };
+          reader.onload = (event) => {
+              const text = event.target?.result as string;
+              if (!text) { onError('File content is empty.'); return; }
+              setUploadProgress(50);
+              const worker = new Worker(new URL('../workers/audit-processor.worker.ts', import.meta.url));
+              worker.onmessage = (e) => {
+                  if (e.data.type === 'PROGRESS') {
+                      // keep progress bar moving while worker parses
+                      setUploadProgress(50 + Math.min(40, (e.data.count / 5000) * 40));
+                  }
+                  if (e.data.type === 'COMPLETE') { worker.terminate(); setUploadProgress(100); onProcessed(e.data.data); }
+                  if (e.data.type === 'ERROR') { worker.terminate(); onError(e.data.message); }
+              };
+              worker.onerror = (e) => { worker.terminate(); onError('Worker error: ' + e.message); };
+              worker.postMessage({ type: 'PARSE_CSV', text });
+          };
+          reader.onerror = () => onError('Failed to read file.');
+          reader.readAsText(file);
+      }
   };
 
   const handleUploadNew = () => {
