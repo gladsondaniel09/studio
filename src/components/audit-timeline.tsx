@@ -885,29 +885,31 @@ export default function AuditTimeline() {
           reader.onerror = () => onError('Failed to read file.');
           isXlsx ? reader.readAsArrayBuffer(file) : reader.readAsText(file);
       } else {
-          // CSV: read as text then hand entire string to worker — all parsing + processing off main thread
+          // CSV: read as ArrayBuffer, then TRANSFER (zero-copy) to worker.
+          // Using readAsText + postMessage(string) blocks the main thread during serialization of large files.
+          // ArrayBuffer transfer avoids serialization entirely — the buffer moves to the worker with no copy.
           const reader = new FileReader();
           reader.onprogress = (event) => {
               if (event.lengthComputable) setUploadProgress((event.loaded / event.total) * 40);
           };
           reader.onload = (event) => {
-              const text = event.target?.result as string;
-              if (!text) { onError('File content is empty.'); return; }
-              setUploadProgress(50);
+              const buffer = event.target?.result as ArrayBuffer;
+              if (!buffer) { onError('File content is empty.'); return; }
+              setUploadProgress(45);
               const worker = new Worker(new URL('../workers/audit-processor.worker.ts', import.meta.url));
               worker.onmessage = (e) => {
                   if (e.data.type === 'PROGRESS') {
-                      // keep progress bar moving while worker parses
-                      setUploadProgress(50 + Math.min(40, (e.data.count / 5000) * 40));
+                      setUploadProgress(45 + Math.min(45, (e.data.count / 5000) * 45));
                   }
                   if (e.data.type === 'COMPLETE') { worker.terminate(); setUploadProgress(100); onProcessed(e.data.data); }
                   if (e.data.type === 'ERROR') { worker.terminate(); onError(e.data.message); }
               };
               worker.onerror = (e) => { worker.terminate(); onError('Worker error: ' + e.message); };
-              worker.postMessage({ type: 'PARSE_CSV', text });
+              // Transfer the buffer — zero-copy, main thread is NOT blocked
+              worker.postMessage({ type: 'PARSE_CSV', buffer }, [buffer]);
           };
           reader.onerror = () => onError('Failed to read file.');
-          reader.readAsText(file);
+          reader.readAsArrayBuffer(file);
       }
   };
 
