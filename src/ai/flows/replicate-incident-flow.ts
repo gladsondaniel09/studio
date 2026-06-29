@@ -1,6 +1,7 @@
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { anthropic, ANALYSIS_MODEL } from '@/ai/anthropic';
 import {
   type IncidentAnalysisInput,
   type ReplicationOutput,
@@ -8,11 +9,40 @@ import {
 } from '@/lib/types';
 
 /**
- * @fileOverview A specialized flow to generate high-fidelity business process replication scripts for Xceler.
- * 
- * - replicateIncident - Generates a detailed step-by-step reproduction guide using Xceler CTRM domain language, 
- *   precise data extraction (quantities, IDs, names), and specific module navigation.
+ * @fileOverview Generates a high-fidelity business-process replication script for Xceler CTRM.
+ *
+ * Powered by Claude Opus 4.8 — extracts exact values from the audit logs and
+ * produces precise, step-by-step reproduction instructions in Xceler's domain language.
  */
+
+const SYSTEM_PROMPT = `You are a senior Subject Matter Expert in the Xceler Commodity Trading and Risk Management (CTRM) system.
+
+Your job: read entity audit logs and produce a formal, high-fidelity business-process replication script — exactly how a user would reproduce the state described in the logs using Xceler's specific modules and navigation.
+
+CRITICAL: be extremely precise with values extracted from the logs:
+- Exact quantities and UOMs (e.g. 20,000 MT, 3,999.781 MT).
+- Specific reference numbers (Trade IDs, BL numbers, Invoice IDs).
+- Vessel names and voyage IDs.
+- Profit centers and counterparty names.
+- Precise dates (BL dates, trade dates).
+
+Xceler modules & terminology:
+- Trade Entry: [Physical Trade (Beta)], [Paper Trade (Beta)], or [Deal Slip].
+- Operations: [Operations Dashboard] -> "Split Obligation" (suffixes A, B, C...), "Merge Obligation", "Declare Port".
+- Planning: [Vessel Planning] for Bulk, [Physical/Paper Planning] for Containers.
+- Execution: [Trade Actualization] -> "Load/Unload", "Split BL", "Actualize Quantity".
+- Inventory: [Build Inventory] -> "GRN Actualization", [Draw Inventory] -> "GI Actualization".
+- Finance: [Settlement (Trade & Cost)] -> "Generate Commercial Invoice", "Post Invoice".
+- Reporting: [Report Dashboard] -> "Long Cargo Report", "Daily Position & P&L".
+
+Style:
+1. Start with contract creation: "Create a [Buy/Sell] Physical Trade for [Qty] [UOM] in Profit Center [PC] with Counterparty [CP]."
+2. Detail splits exactly: "Navigate to [Operations Dashboard] and perform Split Obligation into [N] splits: [list each exact quantity]."
+3. Detail logistics: "Go to [Vessel Planning], Allocate Transport to Vessel [Name], and Actualize Load in [Trade Actualization] using BL No [Number] dated [Date]."
+4. Detail finance: "In [Settlement (Trade & Cost)], generate the Commercial Invoice and click 'POST'."
+5. Conclude: "Open the [Report Name] in [Report Dashboard]. Search for [Vessel/Trade] and observe the discrepancy: Expected [Value] but found [Value]."
+
+Only use evidence present in the logs. Do not invent values.`;
 
 export async function replicateIncident(
   input: IncidentAnalysisInput
@@ -22,61 +52,37 @@ export async function replicateIncident(
       throw new Error('Input logs are empty.');
     }
 
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is not configured on the server.');
+    }
+
     const logs =
-      input.logs.length > 12000
-        ? input.logs.slice(0, 12000) + '\n[TRUNCATED]'
+      input.logs.length > 200000
+        ? input.logs.slice(0, 200000) + '\n[TRUNCATED]'
         : input.logs;
 
-    const promptText = `You are a senior Subject Matter Expert in the Xceler Commodity Trading and Risk Management (CTRM) system.
-Analyze the following audit logs and generate a formal, high-fidelity business process replication script.
-
-CRITICAL REQUIREMENT: You MUST be extremely detailed with values. Extract and include:
-- Exact Quantities and UOMs (e.g., 20,000 MT, 3,999.781 MT).
-- Specific Reference Numbers (Trade IDs, BL Numbers, Invoice IDs).
-- Vessel Names and Voyage IDs.
-- Profit Centers and Counterparty Names.
-- Precise Dates (BL Dates, Trade Dates).
-
-Your goal is to describe exactly how a user would reproduce the state described in the logs using Xceler's specific modules and navigation as described in the system manual.
-
-Xceler Modules & Terminology Mapping:
-- Trade Entry: [Physical Trade (Beta)], [Paper Trade (Beta)], or [Deal Slip].
-- Operations: [Operations Dashboard] -> "Split Obligation" (use suffixes A, B, C...), "Merge Obligation", "Declare Port".
-- Planning: [Vessel Planning] for Bulk or [Physical/Paper Planning] for Containers.
-- Execution: [Trade Actualization] -> "Load/Unload", "Split BL", "Actualize Quantity".
-- Inventory: [Build Inventory] -> "GRN Actualization", [Draw Inventory] -> "GI Actualization".
-- Finance: [Settlement (Trade & Cost)] -> "Generate Commercial Invoice", "Post Invoice".
-- Reporting: [Report Dashboard] -> "Long Cargo Report", "Daily Position & P&L".
-
-Strict Style Guidelines:
-1. Start with contract creation: "Create a [Buy/Sell] Physical Trade for [Qty] [UOM] in Profit Center [PC] with Counterparty [CP]."
-2. Detail splits exactly: "Navigate to [Operations Dashboard] and perform Split Obligation into [N] splits: [List each exact quantity]."
-3. Detail logistics: "Go to [Vessel Planning], Allocate Transport to Vessel [Name], and Actualize Load in [Trade Actualization] using BL No [Number] dated [Date]."
-4. Detail finance: "In [Settlement (Trade & Cost)], generate the Commercial Invoice and click 'POST'."
-5. Conclusion: "Open the [Report Name] in [Report Dashboard]. Search for [Vessel/Trade] and observe the discrepancy: Expected [Value] but found [Value]."
-
-Logs:
-${logs}`;
-
-    const response = await ai.generate({
-      model: 'groq/llama-3.3-70b-versatile',
-      prompt: promptText,
-      config: {
-        temperature: 0.1, // Minimal temperature for precise data extraction
+    const response = await anthropic.messages.parse({
+      model: ANALYSIS_MODEL,
+      max_tokens: 16000,
+      thinking: { type: 'adaptive' },
+      system: SYSTEM_PROMPT,
+      output_config: {
+        format: zodOutputFormat(ReplicationOutputSchema),
       },
-      output: {
-        format: 'json',
-        schema: ReplicationOutputSchema,
-      },
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a detailed business-process replication script from the following audit logs.\n\nLogs:\n${logs}`,
+        },
+      ],
     });
-    
-    const output = response.output;
-    if (!output) {
-        throw new Error('The AI model did not return any replication content.');
-    }
-    
-    return output;
 
+    const output = response.parsed_output;
+    if (!output) {
+      throw new Error('The AI model did not return any replication content.');
+    }
+
+    return output;
   } catch (error: any) {
     console.error('[REPLICATION_FLOW_ERROR]', error);
     throw new Error(error.message || 'Replication logic failed.');

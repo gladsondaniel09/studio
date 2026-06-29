@@ -45,7 +45,7 @@ export const IncidentAnalysisOutputSchema = z.object({
         entity_name: z.string().describe("The name of the entity involved."),
         action: z.string().describe("The action performed (Create, Update, Delete)."),
         description: z.string().describe("Forensic detail of what happened."),
-        changed_fields: z.any().optional().describe("Details of fields that were updated."),
+        changed_fields: z.string().optional().describe("A human-readable summary of fields that were updated (field: old -> new), joined into one string."),
         business_impact: z.string().describe("The impact this event has on the trade or accounting flow.")
     })).describe("Detailed chronological breakdown of the trade lifecycle."),
     steps_to_replicate: z.array(z.string()).describe("A list of steps to replicate the issue."),
