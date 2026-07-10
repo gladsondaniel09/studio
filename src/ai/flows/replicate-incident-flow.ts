@@ -6,6 +6,7 @@ import {
   type ReplicationOutput,
   ReplicationOutputSchema,
 } from '@/lib/types';
+import { APICAL_KB } from '@/ai/knowledge/apical_kb';
 
 const SYSTEM_PROMPT = `You are a senior Subject Matter Expert (SME) for the Xceler CTRM platform, specialized in PIL (Pacific InterLink) commodity trading operations.
 
@@ -80,6 +81,11 @@ SC 43: Quick Washout
 - Call out mandatory prerequisites at each stage (e.g. "Prerequisite: Sales obligation must be split before this step").
 - Conclude with the observation: "Expected: [X] | Actual: [Y] | Discrepancy: [Z]" using values from the logs.`;
 
+function isApicalCustomer(input: IncidentAnalysisInput): boolean {
+  const customer = input.context?.customer?.toLowerCase() ?? '';
+  return customer.includes('apical') || customer.includes('ats');
+}
+
 function buildCaseBrief(input: IncidentAnalysisInput): string {
   const ctx = input.context;
   if (!ctx || (!ctx.customer && !ctx.symptom && !ctx.affectedEntityIds && !ctx.dateRange)) {
@@ -111,9 +117,10 @@ export async function replicateIncident(
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);
+    const customerKb = isApicalCustomer(input) ? `\n\n---\n\n${APICAL_KB}\n\n---\n` : '';
 
     return await generateStructured({
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + customerKb,
       schema: ReplicationOutputSchema,
       prompt: `${caseBrief ? caseBrief + '\n\n' : ''}Generate a high-fidelity Xceler business-process replication script from the following audit logs.
 

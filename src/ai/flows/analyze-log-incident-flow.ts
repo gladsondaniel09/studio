@@ -6,8 +6,9 @@ import {
   type IncidentAnalysisOutput,
   IncidentAnalysisOutputSchema,
 } from '@/lib/types';
+import { APICAL_KB } from '@/ai/knowledge/apical_kb';
 
-const SYSTEM_PROMPT = `You are a senior L3 forensic investigator for the Taomish Xceler CTRM (Commodity Trading and Risk Management) platform, with deep expertise in PIL (Pacific InterLink) commodity trading operations.
+const SYSTEM_PROMPT = `You are a senior L3 forensic investigator for the Taomish Xceler CTRM (Commodity Trading and Risk Management) platform, with deep expertise in PIL (Pacific InterLink) and APICAL commodity trading operations.
 
 You analyze ENTITY AUDIT LOGS as evidence in a customer-reported support case. Logs contain fields:
 created_timestamp, action, entity_name, entity_id, parent_id, table_name, payload, updated_by, created_by, tenant_id.
@@ -173,6 +174,11 @@ SC 43: Quick Washout: Cargo split into multiple shipments, one shipment cancelle
 
 Be precise with quantities, IDs, names, and dates. Do not hallucinate values not present in the logs.`;
 
+function isApicalCustomer(input: IncidentAnalysisInput): boolean {
+  const customer = input.context?.customer?.toLowerCase() ?? '';
+  return customer.includes('apical') || customer.includes('ats');
+}
+
 function buildCaseBrief(input: IncidentAnalysisInput): string {
   const ctx = input.context;
   if (!ctx || (!ctx.customer && !ctx.symptom && !ctx.affectedEntityIds && !ctx.dateRange)) {
@@ -206,9 +212,10 @@ export async function analyzeLogIncident(
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);
+    const customerKb = isApicalCustomer(input) ? `\n\n---\n\n${APICAL_KB}\n\n---\n` : '';
 
     return await generateStructured({
-      system: SYSTEM_PROMPT,
+      system: SYSTEM_PROMPT + customerKb,
       schema: IncidentAnalysisOutputSchema,
       prompt: `${caseBrief ? caseBrief + '\n\n' : ''}Analyze the following Xceler CTRM audit logs and produce a structured forensic investigation report.
 
