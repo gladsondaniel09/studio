@@ -8,7 +8,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -48,6 +48,9 @@ import { replicateIncident } from '@/ai/flows/replicate-incident-flow';
 import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
+import { useFirestore } from '@/firebase';
+import { createSessionRef, saveAnalysis as saveAnalysisToDb } from '@/firebase/sessions';
+import SessionsSidebar, { type RestoreParams } from '@/components/sessions-sidebar';
 
 // Standardize timestamps exactly as received using Regex to avoid JS Date timezone shifts
 const formatTimestamp = (ts: string | undefined): string => {
@@ -778,6 +781,11 @@ export default function AuditTimeline() {
     customer: '', symptom: '', affectedEntityIds: '', dateRange: '',
   });
 
+  // Session persistence
+  const firestore = useFirestore();
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   // For controlled event expansion with navigation
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [isEventDetailsOpen, setIsEventDetailsOpen] = useState(false);
@@ -827,17 +835,13 @@ export default function AuditTimeline() {
     }
   };
 
-  const handleViewTimeline = () => {
-      if (!file) {
-          setError('Please select a file first.');
-          return;
-      }
+  const processFile = (targetFile: File, afterProcess?: () => void) => {
       setIsProcessingFile(true);
       setUploadProgress(0);
       setProcessedCount(0);
 
-      const isXlsx = file.type.includes('spreadsheetml') || file.name.endsWith('.xlsx');
-      const isJson = file.type === 'application/json' || file.name.endsWith('.json');
+      const isXlsx = targetFile.type.includes('spreadsheetml') || targetFile.name.endsWith('.xlsx');
+      const isJson = targetFile.type === 'application/json' || targetFile.name.endsWith('.json');
 
       const onProcessed = (processedData: any[]) => {
           if (processedData.length === 0) {
@@ -861,7 +865,18 @@ export default function AuditTimeline() {
               setActiveView('table');
           }
           setView('timeline');
+          setFile(targetFile);
+          setFileName(targetFile.name);
           setIsProcessingFile(false);
+
+          // Save session to Firestore + Storage in background (fire-and-forget)
+          const snippet = JSON.stringify(processedData.slice(0, 3)).slice(0, 200);
+          const { sessionId, saveAsync } = createSessionRef(firestore);
+          setCurrentSessionId(sessionId);
+          saveAsync(targetFile, processedData.length, snippet)
+              .catch(e => console.error('[SESSION_SAVE_ERROR]', e));
+
+          afterProcess?.();
       };
 
       const onError = (msg: string) => {
@@ -901,7 +916,7 @@ export default function AuditTimeline() {
               } catch (e: any) { onError('Failed to read file: ' + e.message); }
           };
           reader.onerror = () => onError('Failed to read file.');
-          isXlsx ? reader.readAsArrayBuffer(file) : reader.readAsText(file);
+          isXlsx ? reader.readAsArrayBuffer(targetFile) : reader.readAsText(targetFile);
       } else {
           // CSV: read as ArrayBuffer, then TRANSFER (zero-copy) to worker.
           // Using readAsText + postMessage(string) blocks the main thread during serialization of large files.
@@ -928,8 +943,27 @@ export default function AuditTimeline() {
               worker.postMessage({ type: 'PARSE_CSV', buffer }, [buffer]);
           };
           reader.onerror = () => onError('Failed to read file.');
-          reader.readAsArrayBuffer(file);
+          reader.readAsArrayBuffer(targetFile);
       }
+  };
+
+  const handleViewTimeline = () => {
+      if (!file) { setError('Please select a file first.'); return; }
+      processFile(file);
+  };
+
+  const handleRestoreAnalysis = ({ buffer, fileName: restoredName, context, pendingAction: action }: RestoreParams) => {
+      const isXlsx = restoredName.endsWith('.xlsx');
+      const isJson = restoredName.endsWith('.json');
+      const mimeType = isXlsx
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : isJson ? 'application/json' : 'text/csv';
+      const restoredFile = new File([buffer], restoredName, { type: mimeType });
+      processFile(restoredFile, () => {
+          setInvestigationContext(context);
+          setPendingAction(action);
+          setShowContextForm(true);
+      });
   };
 
   const handleUploadNew = () => {
@@ -949,6 +983,7 @@ export default function AuditTimeline() {
     setReplicationResult(null);
     setExpandedIndex(null);
     setIsEventDetailsOpen(false);
+    setCurrentSessionId(null);
   }
   
   const handleStageClick = (entities: string[]) => {
@@ -999,6 +1034,10 @@ export default function AuditTimeline() {
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
                 setAnalysisResult(result);
+                if (currentSessionId) {
+                    saveAnalysisToDb(firestore, currentSessionId, 'forensic', ctx, result)
+                        .catch(e => console.error('[ANALYSIS_PERSIST_ERROR]', e));
+                }
             } catch (e: any) {
                 console.error(e);
                 toast({ variant: 'destructive', title: 'Analysis Failed', description: e.message || 'An unexpected error occurred during analysis.' });
@@ -1023,6 +1062,10 @@ export default function AuditTimeline() {
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
                 setReplicationResult(result);
+                if (currentSessionId) {
+                    saveAnalysisToDb(firestore, currentSessionId, 'replication', ctx, result)
+                        .catch(e => console.error('[REPLICATION_PERSIST_ERROR]', e));
+                }
             } catch (e: any) {
                 console.error(e);
                 toast({ variant: 'destructive', title: 'Replication Failed', description: e.message || 'Failed to generate replication steps.' });
@@ -1164,7 +1207,14 @@ export default function AuditTimeline() {
     const currentExpandedEvent = expandedIndex !== null ? filteredData[expandedIndex] : null;
 
     return (
-      <div className='flex flex-col h-screen w-full'>
+      <div className='flex h-screen w-full overflow-hidden'>
+          {sidebarOpen && (
+            <SessionsSidebar
+              currentSessionId={currentSessionId}
+              onRestoreAnalysis={handleRestoreAnalysis}
+            />
+          )}
+          <div className='flex flex-col flex-1 min-w-0 overflow-hidden'>
           {dataType === 'audit' && <Walkthrough
             steps={timelineWalkthroughSteps}
             isOpen={showTimelineWalkthrough}
@@ -1317,6 +1367,9 @@ export default function AuditTimeline() {
                         </Button>
                     </div>
                   )}
+                  <Button variant="ghost" size="icon" title="Session History" onClick={() => setSidebarOpen(v => !v)}>
+                      <History className="w-5 h-5" />
+                  </Button>
                   <ThemeToggle />
               </div>
           </header>
@@ -1436,14 +1489,23 @@ export default function AuditTimeline() {
                 <DataGrid data={filteredData} columns={columns} dataType={dataType!} />
             )}
           </div>
+          </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center w-full min-h-[80vh]">
+    <div className="flex h-screen w-full overflow-hidden">
+        {sidebarOpen && (
+          <SessionsSidebar
+            currentSessionId={currentSessionId}
+            onRestoreAnalysis={handleRestoreAnalysis}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center flex-1 min-w-0">
         <Walkthrough steps={uploadWalkthroughSteps} isOpen={showUploadWalkthrough} onClose={() => setShowUploadWalkthrough(false)} />
         <div className="w-full max-w-lg text-right mb-4 flex justify-end items-center gap-2">
+            <Button variant="ghost" size="icon" title="Session History" onClick={() => setSidebarOpen(v => !v)}><History className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={() => setShowUploadWalkthrough(true)}><HelpCircle className="w-5 h-5" /></Button>
             <ThemeToggle />
         </div>
@@ -1486,6 +1548,7 @@ export default function AuditTimeline() {
                 {error && <p className="text-sm font-medium text-destructive">{error}</p>}
             </CardContent>
         </Card>
+        </div>
     </div>
   );
 }
