@@ -101,7 +101,7 @@ function buildCaseBrief(input: IncidentAnalysisInput): string {
 
 export async function replicateIncident(
   input: IncidentAnalysisInput
-): Promise<ReplicationOutput> {
+): Promise<ReplicationOutput | { error: string }> {
   try {
     if (!input?.logs?.trim()) {
       throw new Error('Input logs are empty.');
@@ -140,6 +140,10 @@ ${logs}`,
     });
   } catch (error: any) {
     console.error('[REPLICATION_FLOW_ERROR]', error);
-    throw new Error(error.message || 'Replication logic failed.');
+    const raw = error?.message ?? '';
+    const msg = raw.includes('RESOURCE_EXHAUSTED') || raw.includes('prepayment')
+      ? 'Gemini API credits exhausted. Please top up at AI Studio to continue.'
+      : raw || 'Replication logic failed.';
+    return { error: msg };
   }
 }

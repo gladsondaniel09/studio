@@ -1033,10 +1033,15 @@ export default function AuditTimeline() {
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
-                setAnalysisResult(result);
-                if (currentSessionId) {
-                    saveAnalysisToDb(firestore, currentSessionId, 'forensic', ctx, result)
-                        .catch(e => console.error('[ANALYSIS_PERSIST_ERROR]', e));
+                if ('error' in result) {
+                    toast({ variant: 'destructive', title: 'Analysis Failed', description: result.error });
+                    setShowAnalysisDialog(false);
+                } else {
+                    setAnalysisResult(result);
+                    if (currentSessionId) {
+                        saveAnalysisToDb(firestore, currentSessionId, 'forensic', ctx, result)
+                            .catch(e => console.error('[ANALYSIS_PERSIST_ERROR]', e));
+                    }
                 }
             } catch (e: any) {
                 console.error(e);
@@ -1061,10 +1066,15 @@ export default function AuditTimeline() {
                 })).join('\n');
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
-                setReplicationResult(result);
-                if (currentSessionId) {
-                    saveAnalysisToDb(firestore, currentSessionId, 'replication', ctx, result)
-                        .catch(e => console.error('[REPLICATION_PERSIST_ERROR]', e));
+                if ('error' in result) {
+                    toast({ variant: 'destructive', title: 'Replication Failed', description: result.error });
+                    setShowReplicateDialog(false);
+                } else {
+                    setReplicationResult(result);
+                    if (currentSessionId) {
+                        saveAnalysisToDb(firestore, currentSessionId, 'replication', ctx, result)
+                            .catch(e => console.error('[REPLICATION_PERSIST_ERROR]', e));
+                    }
                 }
             } catch (e: any) {
                 console.error(e);
