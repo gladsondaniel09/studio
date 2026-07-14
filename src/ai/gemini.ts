@@ -10,8 +10,8 @@ import type { z } from 'zod';
 const apiKey = process.env.GEMINI_API_KEY ?? '';
 const genAI = new GoogleGenAI({ apiKey });
 
-// gemini-2.5-flash is fast, capable, and available on the free tier.
-export const ANALYSIS_MODEL = 'gemini-2.5-flash';
+// gemini-2.5-flash-lite is the current free-tier model.
+export const ANALYSIS_MODEL = 'gemini-2.5-flash-lite';
 
 /**
  * Calls Gemini in JSON mode, then validates the result against the supplied Zod
