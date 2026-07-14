@@ -1033,8 +1033,8 @@ export default function AuditTimeline() {
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
-                if ('error' in result) {
-                    toast({ variant: 'destructive', title: 'Analysis Failed', description: result.error });
+                if (!result || 'error' in result) {
+                    toast({ variant: 'destructive', title: 'Analysis Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowAnalysisDialog(false);
                 } else {
                     setAnalysisResult(result);
@@ -1066,8 +1066,8 @@ export default function AuditTimeline() {
                 })).join('\n');
                 const trimmedLogs = logString.length > 200000 ? logString.slice(0, 200000) : logString;
                 const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
-                if ('error' in result) {
-                    toast({ variant: 'destructive', title: 'Replication Failed', description: result.error });
+                if (!result || 'error' in result) {
+                    toast({ variant: 'destructive', title: 'Replication Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowReplicateDialog(false);
                 } else {
                     setReplicationResult(result);
