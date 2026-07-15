@@ -207,8 +207,8 @@ export async function analyzeLogIncident(
     }
 
     const logs =
-      input.logs.length > 200000
-        ? input.logs.slice(0, 200000) + '\n[TRUNCATED]'
+      input.logs.length > 60000
+        ? input.logs.slice(0, 60000) + '\n[TRUNCATED]'
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);

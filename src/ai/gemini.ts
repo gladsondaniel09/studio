@@ -22,7 +22,7 @@ export async function generateStructured<T>(opts: {
       { role: 'user', content: opts.prompt },
     ],
     response_format: { type: 'json_object' },
-    max_tokens: opts.maxTokens ?? 32000,
+    max_tokens: opts.maxTokens ?? 8000,
     temperature: 0.2,
   });
 
