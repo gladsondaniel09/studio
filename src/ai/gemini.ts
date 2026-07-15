@@ -1,56 +1,41 @@
-import { GoogleGenAI } from '@google/genai';
+import Groq from 'groq-sdk';
 import type { z } from 'zod';
 
-/**
- * Shared Google Gemini client for forensic audit-log analysis.
- *
- * Uses Gemini's free tier. Reads GEMINI_API_KEY from the environment (set it in
- * Vercel project env vars). Create a free key at https://aistudio.google.com/apikey.
- */
-const apiKey = process.env.GEMINI_API_KEY ?? '';
-const genAI = new GoogleGenAI({ apiKey });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? '' });
 
-export const ANALYSIS_MODEL = 'gemini-2.5-flash-lite';
+export const ANALYSIS_MODEL = 'llama-3.3-70b-versatile';
 
-/**
- * Calls Gemini in JSON mode, then validates the result against the supplied Zod
- * schema. Mirrors the previous Anthropic helper so the flows are unchanged.
- */
 export async function generateStructured<T>(opts: {
   system: string;
   prompt: string;
   schema: z.ZodType<T>;
   maxTokens?: number;
 }): Promise<T> {
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not configured on the server.');
+  if (!process.env.GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not configured on the server.');
   }
 
-  const response = await genAI.models.generateContent({
+  const completion = await groq.chat.completions.create({
     model: ANALYSIS_MODEL,
-    contents: opts.prompt,
-    config: {
-      systemInstruction: `${opts.system}
-
-OUTPUT FORMAT
-Respond with a SINGLE valid JSON object that conforms exactly to the schema described in the user message. Do not include any prose, explanation, or markdown code fences. Output only the raw JSON object.`,
-      responseMimeType: 'application/json',
-      maxOutputTokens: opts.maxTokens ?? 32000,
-      temperature: 0.2,
-    },
+    messages: [
+      { role: 'system', content: opts.system + '\n\nOUTPUT FORMAT\nRespond with a SINGLE valid JSON object. Do not include any prose, explanation, or markdown code fences. Output only the raw JSON object.' },
+      { role: 'user', content: opts.prompt },
+    ],
+    response_format: { type: 'json_object' },
+    max_tokens: opts.maxTokens ?? 32000,
+    temperature: 0.2,
   });
 
-  const text = response.text?.trim();
+  const text = completion.choices[0]?.message?.content?.trim();
 
   if (!text) {
-    throw new Error('The AI model did not return any text content.');
+    throw new Error('The AI model did not return any content.');
   }
 
   const json = extractJson(text);
   return opts.schema.parse(json);
 }
 
-/** Pulls the first balanced JSON object out of a model response. */
 function extractJson(text: string): unknown {
   let candidate = text
     .replace(/^```(?:json)?\s*/i, '')
