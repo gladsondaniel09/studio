@@ -112,8 +112,8 @@ export async function replicateIncident(
     }
 
     const logs =
-      input.logs.length > 15000
-        ? input.logs.slice(0, 15000) + '\n[TRUNCATED]'
+      input.logs.length > 8000
+        ? input.logs.slice(0, 8000) + '\n[TRUNCATED]'
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);

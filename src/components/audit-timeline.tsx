@@ -1031,7 +1031,7 @@ export default function AuditTimeline() {
                     payload: e.payload !== 'NULL' ? e.payload : undefined,
                     differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
-                const trimmedLogs = logString.length > 15000 ? logString.slice(0, 15000) : logString;
+                const trimmedLogs = logString.length > 8000 ? logString.slice(0, 8000) : logString;
                 const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Analysis Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
@@ -1064,7 +1064,7 @@ export default function AuditTimeline() {
                     entity: e.entity_name,
                     details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
                 })).join('\n');
-                const trimmedLogs = logString.length > 15000 ? logString.slice(0, 15000) : logString;
+                const trimmedLogs = logString.length > 8000 ? logString.slice(0, 8000) : logString;
                 const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Replication Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
