@@ -10,7 +10,7 @@ import type { z } from 'zod';
 const apiKey = process.env.GEMINI_API_KEY ?? '';
 const genAI = new GoogleGenAI({ apiKey });
 
-export const ANALYSIS_MODEL = 'gemini-2.5-flash-preview-05-20';
+export const ANALYSIS_MODEL = 'gemini-2.5-flash-lite';
 
 /**
  * Calls Gemini in JSON mode, then validates the result against the supplied Zod
