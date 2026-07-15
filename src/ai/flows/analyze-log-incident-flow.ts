@@ -212,8 +212,9 @@ export async function analyzeLogIncident(
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);
-    // KB injection disabled — too large for Groq 12K TPM free tier limit
-    const customerKb = '';
+    const customerKb = (input.useKnowledgeBase && isApicalCustomer(input))
+      ? `\n\n---\n\n${APICAL_KB}\n\n---\n`
+      : '';
 
     return await generateStructured({
       system: SYSTEM_PROMPT + customerKb,

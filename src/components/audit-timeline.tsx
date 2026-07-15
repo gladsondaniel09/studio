@@ -749,6 +749,7 @@ export default function AuditTimeline() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
   const [activeView, setActiveView] = useState<'timeline' | 'table'>('timeline');
+  const [useKnowledgeBase, setUseKnowledgeBase] = useState(false);
 
   // Timeline view renders incrementally to avoid freezing on large datasets
   const TIMELINE_PAGE_SIZE = 50;
@@ -1032,7 +1033,7 @@ export default function AuditTimeline() {
                     differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
                 const trimmedLogs = logString.length > 15000 ? logString.slice(0, 15000) : logString;
-                const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx });
+                const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx, useKnowledgeBase });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Analysis Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowAnalysisDialog(false);
@@ -1065,7 +1066,7 @@ export default function AuditTimeline() {
                     details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
                 })).join('\n');
                 const trimmedLogs = logString.length > 15000 ? logString.slice(0, 15000) : logString;
-                const result = await replicateIncident({ logs: trimmedLogs, context: ctx });
+                const result = await replicateIncident({ logs: trimmedLogs, context: ctx, useKnowledgeBase });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Replication Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowReplicateDialog(false);
@@ -1377,6 +1378,16 @@ export default function AuditTimeline() {
                         </Button>
                     </div>
                   )}
+                  <Button
+                      variant={useKnowledgeBase ? 'default' : 'outline'}
+                      size="sm"
+                      title={useKnowledgeBase ? 'APICAL/PIL KB enabled — click to disable' : 'APICAL/PIL KB disabled — click to enable'}
+                      onClick={() => setUseKnowledgeBase(v => !v)}
+                      className="text-xs h-8 px-3 gap-1.5"
+                  >
+                      <Layers className="w-3.5 h-3.5" />
+                      KB {useKnowledgeBase ? 'ON' : 'OFF'}
+                  </Button>
                   <Button variant="ghost" size="icon" title="Session History" onClick={() => setSidebarOpen(v => !v)}>
                       <History className="w-5 h-5" />
                   </Button>
