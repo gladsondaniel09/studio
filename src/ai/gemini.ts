@@ -3,7 +3,7 @@ import type { z } from 'zod';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY ?? '' });
 
-export const ANALYSIS_MODEL = 'llama-3.3-70b-versatile';
+export const ANALYSIS_MODEL = 'llama-3.1-8b-instant';
 
 export async function generateStructured<T>(opts: {
   system: string;
