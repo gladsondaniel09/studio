@@ -777,7 +777,7 @@ export default function AuditTimeline() {
   // Investigation context form
   const [showContextForm, setShowContextForm] = useState(false);
   const [pendingAction, setPendingAction] = useState<'analyse' | 'replicate' | null>(null);
-  const [useKnowledgeBase, setUseKnowledgeBase] = useState(false);
+  const [kbSelection, setKbSelection] = useState<'none' | 'pil' | 'apical'>('none');
   const [investigationContext, setInvestigationContext] = useState<InvestigationContext>({
     customer: '', symptom: '', affectedEntityIds: '', dateRange: '',
   });
@@ -1033,7 +1033,7 @@ export default function AuditTimeline() {
                     differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
                 const trimmedLogs = logString.length > 8000 ? logString.slice(0, 8000) : logString;
-                const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx, useKnowledgeBase });
+                const result = await analyzeLogIncident({ logs: trimmedLogs, context: ctx, kbSelection });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Analysis Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowAnalysisDialog(false);
@@ -1066,7 +1066,7 @@ export default function AuditTimeline() {
                     details: e.payload && e.payload !== 'NULL' ? e.payload : e.difference_list
                 })).join('\n');
                 const trimmedLogs = logString.length > 8000 ? logString.slice(0, 8000) : logString;
-                const result = await replicateIncident({ logs: trimmedLogs, context: ctx, useKnowledgeBase });
+                const result = await replicateIncident({ logs: trimmedLogs, context: ctx, kbSelection });
                 if (!result || 'error' in result) {
                     toast({ variant: 'destructive', title: 'Replication Failed', description: (result as any)?.error || 'An unexpected error occurred.' });
                     setShowReplicateDialog(false);
@@ -1259,29 +1259,31 @@ export default function AuditTimeline() {
                             <Input id="ctx-date" placeholder="e.g. 2026-06-20 14:00 to 15:30 UTC" value={investigationContext.dateRange ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, dateRange: e.target.value }))} />
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setUseKnowledgeBase(v => !v)}
-                        className={cn(
-                            'w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
-                            useKnowledgeBase
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted/70'
-                        )}
-                    >
-                        <Layers className={cn('h-4 w-4 shrink-0', useKnowledgeBase ? 'text-primary' : 'text-muted-foreground')} />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-medium leading-tight">
-                                {useKnowledgeBase ? 'APICAL / PIL Knowledge Base: ON' : 'APICAL / PIL Knowledge Base: OFF'}
-                            </p>
-                            <p className="text-[10px] mt-0.5 leading-tight opacity-70">
-                                {useKnowledgeBase ? 'KB will be injected for APICAL/ATS customers' : 'Click to enable customer-specific KB context'}
-                            </p>
+                    <div className="space-y-1.5">
+                        <Label className="flex items-center gap-1.5"><Layers className="h-3.5 w-3.5" /> Knowledge Base</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {(['none', 'pil', 'apical'] as const).map(opt => (
+                                <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => setKbSelection(opt)}
+                                    className={cn(
+                                        'rounded-md border px-3 py-2 text-xs font-medium transition-colors',
+                                        kbSelection === opt
+                                            ? 'border-primary bg-primary text-primary-foreground'
+                                            : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted/70'
+                                    )}
+                                >
+                                    {opt === 'none' ? 'None' : opt === 'pil' ? 'PIL' : 'APICAL'}
+                                </button>
+                            ))}
                         </div>
-                        <div className={cn('h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center', useKnowledgeBase ? 'border-primary bg-primary' : 'border-muted-foreground')}>
-                            {useKnowledgeBase && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
-                        </div>
-                    </button>
+                        <p className="text-[10px] text-muted-foreground">
+                            {kbSelection === 'none' && 'No customer KB — uses base Xceler knowledge only'}
+                            {kbSelection === 'pil' && 'PIL KB active — 43 PIL scenarios embedded in system prompt'}
+                            {kbSelection === 'apical' && 'APICAL KB active — ATS v7.2.0 rules and navigation injected'}
+                        </p>
+                    </div>
                     <div className="flex gap-2 pt-2">
                         <Button variant="outline" className="flex-1" onClick={() => setShowContextForm(false)}>Cancel</Button>
                         <Button className="flex-1" onClick={handleRunWithContext}>
