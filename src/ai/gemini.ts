@@ -10,8 +10,8 @@ import type { z } from 'zod';
 const apiKey = process.env.GEMINI_API_KEY ?? '';
 const genAI = new GoogleGenAI({ apiKey });
 
-// gemini-2.0-flash is stable, fast, and available on the free tier.
-export const ANALYSIS_MODEL = 'gemini-2.0-flash';
+// gemini-1.5-flash has the most widely available free tier quota.
+export const ANALYSIS_MODEL = 'gemini-1.5-flash';
 
 /**
  * Calls Gemini in JSON mode, then validates the result against the supplied Zod
@@ -36,9 +36,6 @@ export async function generateStructured<T>(opts: {
 OUTPUT FORMAT
 Respond with a SINGLE valid JSON object that conforms exactly to the schema described in the user message. Do not include any prose, explanation, or markdown code fences. Output only the raw JSON object.`,
       responseMimeType: 'application/json',
-      // Disable "thinking" so the full token budget goes to the JSON answer
-      // (thinking tokens otherwise eat the budget and truncate the output).
-      thinkingConfig: { thinkingBudget: 0 },
       maxOutputTokens: opts.maxTokens ?? 32000,
       temperature: 0.2,
     },
