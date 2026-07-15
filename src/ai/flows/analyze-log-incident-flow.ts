@@ -212,7 +212,8 @@ export async function analyzeLogIncident(
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);
-    const customerKb = isApicalCustomer(input) ? `\n\n---\n\n${APICAL_KB}\n\n---\n` : '';
+    // KB injection disabled — too large for Groq 12K TPM free tier limit
+    const customerKb = '';
 
     return await generateStructured({
       system: SYSTEM_PROMPT + customerKb,
