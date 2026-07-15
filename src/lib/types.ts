@@ -43,6 +43,7 @@ export type InvestigationContext = z.infer<typeof InvestigationContextSchema>;
 export const IncidentAnalysisInputSchema = z.object({
   logs: z.string().describe('A string containing the audit logs to be analyzed.'),
   context: InvestigationContextSchema.optional().describe('Optional investigation context provided by the engineer.'),
+  useKnowledgeBase: z.boolean().optional(),
 });
 export type IncidentAnalysisInput = z.infer<typeof IncidentAnalysisInputSchema>;
 

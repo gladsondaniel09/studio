@@ -212,7 +212,7 @@ export async function analyzeLogIncident(
         : input.logs;
 
     const caseBrief = buildCaseBrief(input);
-    const customerKb = isApicalCustomer(input) ? `\n\n---\n\n${APICAL_KB}\n\n---\n` : '';
+    const customerKb = (input.useKnowledgeBase && isApicalCustomer(input)) ? `\n\n---\n\n${APICAL_KB}\n\n---\n` : '';
 
     return await generateStructured({
       system: SYSTEM_PROMPT + customerKb,
