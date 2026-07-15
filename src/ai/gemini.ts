@@ -10,8 +10,7 @@ import type { z } from 'zod';
 const apiKey = process.env.GEMINI_API_KEY ?? '';
 const genAI = new GoogleGenAI({ apiKey });
 
-// gemini-1.5-flash has the most widely available free tier quota.
-export const ANALYSIS_MODEL = 'gemini-1.5-flash';
+export const ANALYSIS_MODEL = 'gemini-2.5-flash-preview-05-20';
 
 /**
  * Calls Gemini in JSON mode, then validates the result against the supplied Zod
