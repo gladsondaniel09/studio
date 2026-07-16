@@ -1,6 +1,6 @@
 'use server';
 
-import { generateStructured } from '@/ai/gemini';
+import { generateStructured } from '@/ai/groq';
 import {
   type IncidentAnalysisInput,
   type IncidentAnalysisOutput,
@@ -116,18 +116,14 @@ These are NOT infrastructure logs. Reason ONLY from the available audit data.
 
 Be precise with quantities, IDs, names, and dates. Do not hallucinate values not present in the logs.`;
 
-function isApicalCustomer(input: IncidentAnalysisInput): boolean {
-  const customer = input.context?.customer?.toLowerCase() ?? '';
-  return customer.includes('apical') || customer.includes('ats');
-}
-
 function buildCaseBrief(input: IncidentAnalysisInput): string {
   const ctx = input.context;
-  if (!ctx || (!ctx.customer && !ctx.symptom && !ctx.affectedEntityIds && !ctx.dateRange)) {
+  if (!ctx || (!ctx.customer && !ctx.ticketId && !ctx.symptom && !ctx.affectedEntityIds && !ctx.dateRange)) {
     return '';
   }
   const lines = ['CASE BRIEF (provided by the investigating engineer):'];
   if (ctx.customer) lines.push(`- Customer / Tenant: ${ctx.customer}`);
+  if (ctx.ticketId) lines.push(`- Ticket ID: ${ctx.ticketId}`);
   if (ctx.symptom) lines.push(`- Reported symptom: ${ctx.symptom}`);
   if (ctx.affectedEntityIds) lines.push(`- Affected entity IDs: ${ctx.affectedEntityIds}`);
   if (ctx.dateRange) lines.push(`- Incident window: ${ctx.dateRange}`);
@@ -144,8 +140,8 @@ export async function analyzeLogIncident(
       throw new Error('Input logs are empty.');
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not configured on the server.');
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not configured on the server.');
     }
 
     const logs =
@@ -192,8 +188,8 @@ ${logs}`,
   } catch (error: any) {
     console.error('[ANALYSIS_FLOW_ERROR]', error);
     const raw = error?.message ?? '';
-    const msg = raw.includes('RESOURCE_EXHAUSTED') || raw.includes('prepayment')
-      ? 'Gemini API credits exhausted. Please top up at AI Studio to continue.'
+    const msg = error?.status === 429 || raw.includes('rate_limit') || raw.includes('quota')
+      ? 'Groq API rate limit or quota exceeded. Please check your Groq Console usage/limits and try again.'
       : raw || 'Analysis failed due to an internal AI error.';
     return { error: msg };
   }

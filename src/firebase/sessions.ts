@@ -24,12 +24,16 @@ export type SessionDoc = {
   storageRef: string;
 };
 
+export type AnalysisOutcome = 'unresolved' | 'fixed' | 'not_applicable';
+
 export type AnalysisDoc = {
   type: 'forensic' | 'replication';
   createdAt: Timestamp;
   context: InvestigationContext;
   resultTitle: string;
   result: unknown;
+  outcome?: AnalysisOutcome;
+  outcomeNotes?: string;
 };
 
 export type SessionDocWithId = SessionDoc & { id: string };
@@ -69,19 +73,35 @@ export async function saveAnalysis(
   type: 'forensic' | 'replication',
   context: InvestigationContext,
   result: unknown,
-): Promise<void> {
+): Promise<string> {
   const resultTitle =
     type === 'forensic'
       ? ((result as any)?.title ?? 'Forensic Analysis')
       : ((result as any)?.context_summary ?? 'Replication Script');
 
-  await addDoc(collection(db, 'sessions', sessionId, 'analyses'), {
+  const docRef = await addDoc(collection(db, 'sessions', sessionId, 'analyses'), {
     type,
     createdAt: Timestamp.now(),
     context,
     resultTitle,
     result,
+    outcome: 'unresolved',
   } satisfies AnalysisDoc);
+  return docRef.id;
+}
+
+export async function updateAnalysisOutcome(
+  db: Firestore,
+  sessionId: string,
+  analysisId: string,
+  outcome: AnalysisOutcome,
+  outcomeNotes?: string,
+): Promise<void> {
+  await setDoc(
+    doc(db, 'sessions', sessionId, 'analyses', analysisId),
+    { outcome, ...(outcomeNotes !== undefined ? { outcomeNotes } : {}) },
+    { merge: true },
+  );
 }
 
 export async function deleteSession(

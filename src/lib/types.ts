@@ -33,6 +33,7 @@ export type SortEventsOutput = z.infer<typeof SortEventsOutputSchema>;
 // Optional investigation context provided by the engineer before running analysis.
 export const InvestigationContextSchema = z.object({
   customer: z.string().optional().describe('Customer or tenant name.'),
+  ticketId: z.string().optional().describe('The support ticket/case ID this investigation is tracked under (e.g. Jira or Zendesk ID).'),
   symptom: z.string().optional().describe('The reported symptom or issue description from the customer.'),
   affectedEntityIds: z.string().optional().describe('Comma-separated list of affected Trade IDs, Obligation IDs, etc.'),
   dateRange: z.string().optional().describe('Approximate incident date/time range (e.g. "2026-06-20 14:00 to 15:30").'),

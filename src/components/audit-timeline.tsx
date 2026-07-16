@@ -49,8 +49,9 @@ import { cn } from '@/lib/utils';
 import DataGrid from './data-grid';
 import { RawJsonViewer } from './raw-json-viewer';
 import { useFirestore } from '@/firebase';
-import { createSessionRef, saveAnalysis as saveAnalysisToDb } from '@/firebase/sessions';
+import { createSessionRef, saveAnalysis as saveAnalysisToDb, updateAnalysisOutcome, type AnalysisOutcome } from '@/firebase/sessions';
 import SessionsSidebar, { type RestoreParams } from '@/components/sessions-sidebar';
+import { detectKbFromCustomer } from '@/lib/kb-detection';
 
 // Standardize timestamps exactly as received using Regex to avoid JS Date timezone shifts
 const formatTimestamp = (ts: string | undefined): string => {
@@ -719,6 +720,47 @@ const ReplicationResultDisplay = ({ result }: { result: ReplicationOutput }) => 
     );
 };
 
+const OUTCOME_OPTIONS: { value: AnalysisOutcome; label: string }[] = [
+    { value: 'unresolved', label: 'Unresolved' },
+    { value: 'fixed', label: 'Fixed' },
+    { value: 'not_applicable', label: 'N/A' },
+];
+
+function OutcomeSelector({ value, onChange, disabled }: { value: AnalysisOutcome; onChange: (v: AnalysisOutcome) => void; disabled?: boolean }) {
+    return (
+        <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] text-muted-foreground">Outcome:</span>
+            <div className="flex gap-1">
+                {OUTCOME_OPTIONS.map(opt => (
+                    <button
+                        key={opt.value}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onChange(opt.value)}
+                        className={cn(
+                            'rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50',
+                            value === opt.value
+                                ? opt.value === 'fixed'
+                                    ? 'border-green-600 bg-green-600 text-white'
+                                    : opt.value === 'not_applicable'
+                                    ? 'border-muted-foreground bg-muted-foreground text-background'
+                                    : 'border-amber-500 bg-amber-500 text-white'
+                                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted/70'
+                        )}
+                    >
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// Caps how much of a single payload/difference_list string gets indexed for search.
+// Large entities (e.g. PostHistoryEntity) can carry payloads of hundreds of KB — searching
+// within the first 20K chars covers IDs/names/values in practice without the cost of the full blob.
+const SEARCH_TEXT_FIELD_CAP = 20_000;
+
 const AUDIT_LOG_COLUMNS = [
     { key: 'business_timestamp', name: 'TIMESTAMP' },
     { key: 'entity_name', name: 'ENTITY' },
@@ -769,17 +811,22 @@ export default function AuditTimeline() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<IncidentAnalysisOutput | null>(null);
   const [showAnalysisDialog, setShowAnalysisDialog] = useState(false);
+  const [analysisDocId, setAnalysisDocId] = useState<string | null>(null);
+  const [analysisOutcome, setAnalysisOutcome] = useState<AnalysisOutcome>('unresolved');
 
   const [isReplicating, setIsReplicating] = useState(false);
   const [replicationResult, setReplicationResult] = useState<ReplicationOutput | null>(null);
   const [showReplicateDialog, setShowReplicateDialog] = useState(false);
+  const [replicationDocId, setReplicationDocId] = useState<string | null>(null);
+  const [replicationOutcome, setReplicationOutcome] = useState<AnalysisOutcome>('unresolved');
 
   // Investigation context form
   const [showContextForm, setShowContextForm] = useState(false);
   const [pendingAction, setPendingAction] = useState<'analyse' | 'replicate' | null>(null);
   const [kbSelection, setKbSelection] = useState<'none' | 'pil' | 'apical'>('none');
+  const [kbManuallySet, setKbManuallySet] = useState(false);
   const [investigationContext, setInvestigationContext] = useState<InvestigationContext>({
-    customer: '', symptom: '', affectedEntityIds: '', dateRange: '',
+    customer: '', ticketId: '', symptom: '', affectedEntityIds: '', dateRange: '',
   });
 
   // Session persistence
@@ -1018,6 +1065,8 @@ export default function AuditTimeline() {
         if (pendingAction === 'analyse') {
             setIsAnalyzing(true);
             setAnalysisResult(null);
+            setAnalysisDocId(null);
+            setAnalysisOutcome('unresolved');
             setShowAnalysisDialog(true);
             try {
                 const dataForAnalysis = filteredData.slice(0, 100);
@@ -1041,6 +1090,7 @@ export default function AuditTimeline() {
                     setAnalysisResult(result);
                     if (currentSessionId) {
                         saveAnalysisToDb(firestore, currentSessionId, 'forensic', ctx, result)
+                            .then(id => setAnalysisDocId(id))
                             .catch(e => console.error('[ANALYSIS_PERSIST_ERROR]', e));
                     }
                 }
@@ -1056,6 +1106,8 @@ export default function AuditTimeline() {
         if (pendingAction === 'replicate') {
             setIsReplicating(true);
             setReplicationResult(null);
+            setReplicationDocId(null);
+            setReplicationOutcome('unresolved');
             setShowReplicateDialog(true);
             try {
                 const dataForReplication = filteredData.slice(0, 100);
@@ -1074,6 +1126,7 @@ export default function AuditTimeline() {
                     setReplicationResult(result);
                     if (currentSessionId) {
                         saveAnalysisToDb(firestore, currentSessionId, 'replication', ctx, result)
+                            .then(id => setReplicationDocId(id))
                             .catch(e => console.error('[REPLICATION_PERSIST_ERROR]', e));
                     }
                 }
@@ -1132,9 +1185,24 @@ export default function AuditTimeline() {
       
       if (!searchTerm) return true;
 
-      // Compute _searchable_text lazily on first search to avoid blocking the main thread at load time
+      // Compute _searchable_text lazily on first search to avoid blocking the main thread at load time.
+      // For audit rows, build it from the known raw fields instead of recursively walking parsed_payload/
+      // parsed_difference_list (which duplicate payload/difference_list) — entities like PostHistoryEntity
+      // can carry payloads of hundreds of KB, and a full recursive object walk on every such row the first
+      // time the user types a search character was enough to freeze the tab for several seconds.
       if (!event._searchable_text) {
-        event._searchable_text = getObjectValues(event).toLowerCase();
+        if (dataType === 'audit') {
+          const rawPayload = typeof event.payload === 'string' ? event.payload.slice(0, SEARCH_TEXT_FIELD_CAP) : '';
+          const rawDiff = typeof event.difference_list === 'string' ? event.difference_list.slice(0, SEARCH_TEXT_FIELD_CAP) : '';
+          event._searchable_text = [
+            event.created_timestamp, event.business_timestamp, event.action, event.entity_name,
+            event.entity_id, event.parent_id, event.table_name, event.display_user,
+            event.user?.name, event.user?.email, event.updated_by, event.created_by, event.tenant_id,
+            rawPayload, rawDiff,
+          ].filter(Boolean).join(' ').toLowerCase();
+        } else {
+          event._searchable_text = getObjectValues(event).toLowerCase();
+        }
       }
       return event._searchable_text.includes(lowerCaseSearchTerm);
     });
@@ -1244,7 +1312,15 @@ export default function AuditTimeline() {
                         <p className="text-sm text-muted-foreground">Provide context about the customer issue. This helps the AI anchor its analysis to the reported symptom rather than summarizing logs generically. All fields are optional.</p>
                         <div className="space-y-2">
                             <Label htmlFor="ctx-customer">Customer / Tenant</Label>
-                            <Input id="ctx-customer" placeholder="e.g. Acme Trading Ltd" value={investigationContext.customer ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, customer: e.target.value }))} />
+                            <Input id="ctx-customer" placeholder="e.g. Acme Trading Ltd" value={investigationContext.customer ?? ''} onChange={e => {
+                                const customer = e.target.value;
+                                setInvestigationContext(c => ({ ...c, customer }));
+                                if (!kbManuallySet) setKbSelection(detectKbFromCustomer(customer));
+                            }} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="ctx-ticket">Ticket ID</Label>
+                            <Input id="ctx-ticket" placeholder="e.g. SUPP-4821" value={investigationContext.ticketId ?? ''} onChange={e => setInvestigationContext(c => ({ ...c, ticketId: e.target.value }))} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="ctx-symptom">Reported Symptom <span className="text-primary font-bold">*</span></Label>
@@ -1266,7 +1342,7 @@ export default function AuditTimeline() {
                                 <button
                                     key={opt}
                                     type="button"
-                                    onClick={() => setKbSelection(opt)}
+                                    onClick={() => { setKbSelection(opt); setKbManuallySet(true); }}
                                     className={cn(
                                         'rounded-md border px-3 py-2 text-xs font-medium transition-colors',
                                         kbSelection === opt
@@ -1282,6 +1358,7 @@ export default function AuditTimeline() {
                             {kbSelection === 'none' && 'No customer KB — uses base Xceler knowledge only'}
                             {kbSelection === 'pil' && 'PIL KB active — 43 PIL scenarios embedded in system prompt'}
                             {kbSelection === 'apical' && 'APICAL KB active — ATS v7.2.0 rules and navigation injected'}
+                            {!kbManuallySet && kbSelection !== 'none' && ' (auto-detected from customer name — click to override)'}
                         </p>
                     </div>
                     <div className="flex gap-2 pt-2">
@@ -1295,7 +1372,22 @@ export default function AuditTimeline() {
 
            <Dialog open={showAnalysisDialog} onOpenChange={setShowAnalysisDialog}>
                 <DialogContent className="max-w-5xl h-[90vh]">
-                    <DialogHeader><DialogTitle>Forensic Trade Lifecycle Analysis</DialogTitle></DialogHeader>
+                    <DialogHeader className="flex-row items-center justify-between gap-4 pr-8">
+                        <DialogTitle>Forensic Trade Lifecycle Analysis</DialogTitle>
+                        {analysisResult && (
+                            <OutcomeSelector
+                                value={analysisOutcome}
+                                disabled={!analysisDocId}
+                                onChange={(outcome) => {
+                                    setAnalysisOutcome(outcome);
+                                    if (currentSessionId && analysisDocId) {
+                                        updateAnalysisOutcome(firestore, currentSessionId, analysisDocId, outcome)
+                                            .catch(e => console.error('[OUTCOME_UPDATE_ERROR]', e));
+                                    }
+                                }}
+                            />
+                        )}
+                    </DialogHeader>
                     <div className="relative flex-1 min-h-0">
                          <ScrollArea className="h-full w-full">
                             <div className="py-4 pr-4">
@@ -1317,7 +1409,22 @@ export default function AuditTimeline() {
 
             <Dialog open={showReplicateDialog} onOpenChange={setShowReplicateDialog}>
                 <DialogContent className="max-w-3xl h-[80vh]">
-                    <DialogHeader><DialogTitle>High-Fidelity Replication Script</DialogTitle></DialogHeader>
+                    <DialogHeader className="flex-row items-center justify-between gap-4 pr-8">
+                        <DialogTitle>High-Fidelity Replication Script</DialogTitle>
+                        {replicationResult && (
+                            <OutcomeSelector
+                                value={replicationOutcome}
+                                disabled={!replicationDocId}
+                                onChange={(outcome) => {
+                                    setReplicationOutcome(outcome);
+                                    if (currentSessionId && replicationDocId) {
+                                        updateAnalysisOutcome(firestore, currentSessionId, replicationDocId, outcome)
+                                            .catch(e => console.error('[OUTCOME_UPDATE_ERROR]', e));
+                                    }
+                                }}
+                            />
+                        )}
+                    </DialogHeader>
                     <div className="relative flex-1 min-h-0">
                          <ScrollArea className="h-full w-full">
                             <div className="py-4 pr-4">

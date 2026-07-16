@@ -15,7 +15,7 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered, CheckCircle2, Ban } from 'lucide-react';
 
 export type RestoreParams = {
   buffer: ArrayBuffer;
@@ -197,10 +197,13 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
                             <span className="text-[10px] font-medium text-foreground/80 line-clamp-2 leading-tight">
                               {analysis.resultTitle}
                             </span>
+                            {analysis.outcome === 'fixed' && <CheckCircle2 className="h-3 w-3 shrink-0 mt-0.5 text-green-600" />}
+                            {analysis.outcome === 'not_applicable' && <Ban className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground" />}
                           </div>
                           <p className="text-[9px] text-muted-foreground mt-0.5 truncate pl-4">
                             {format(analysis.createdAt.toDate(), 'MMM d, HH:mm')}
                             {analysis.context?.customer ? ` · ${analysis.context.customer}` : ''}
+                            {analysis.context?.ticketId ? ` · ${analysis.context.ticketId}` : ''}
                           </p>
                           {isRestoring && (
                             <div className="flex items-center gap-1 mt-0.5 pl-4">
