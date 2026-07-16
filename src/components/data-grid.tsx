@@ -54,6 +54,178 @@ const isJsonContent = (value: any): boolean => {
   return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
 };
 
+interface FilterHeaderProps {
+  columnKey: string;
+  columnName: string;
+  data: GenericRow[];
+  filters: Record<string, string[]>;
+  setFilters: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
+  sortConfig: SortConfig;
+  setSortConfig: React.Dispatch<React.SetStateAction<SortConfig>>;
+}
+
+function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortConfig, setSortConfig }: FilterHeaderProps) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const uniqueValues = useMemo(() => {
+    const values = data.map(row => String(row[columnKey] ?? 'None'));
+    return Array.from(new Set(values)).sort();
+  }, [data, columnKey]);
+
+  const filteredOptions = uniqueValues.filter(v =>
+    v.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const selected = filters[columnKey] || [];
+  const isSorted = sortConfig.columnKey === columnKey;
+
+  const handleToggle = (val: string) => {
+    setFilters(prev => {
+      const current = prev[columnKey] || [];
+      const next = current.includes(val)
+        ? current.filter(item => item !== val)
+        : [...current, val];
+      if (next.length === 0) {
+        const newState = { ...prev };
+        delete newState[columnKey];
+        return newState;
+      }
+      return { ...prev, [columnKey]: next };
+    });
+  };
+
+  const handleClear = () => {
+    setFilters(prev => {
+      const next = { ...prev };
+      delete next[columnKey];
+      return next;
+    });
+  };
+
+  const handleSort = (direction: 'ASC' | 'DESC') => {
+    setSortConfig({ columnKey, direction });
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex items-center justify-between w-full px-2 py-1 group">
+      <div className="flex items-center gap-1 min-w-0 flex-1">
+        <span className="font-bold text-xs uppercase tracking-wider truncate" title={columnName}>
+          {columnName}
+        </span>
+        {isSorted && (
+          sortConfig.direction === 'ASC' ? <SortAsc className="h-3 w-3 text-primary shrink-0" /> : <SortDesc className="h-3 w-3 text-primary shrink-0" />
+        )}
+      </div>
+
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              "p-1 rounded hover:bg-muted transition-colors",
+              (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Filter className="h-3.5 w-3.5" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-0" align="start" onInteractOutside={(e) => e.preventDefault()} onOpenAutoFocus={(e) => e.preventDefault()}>
+          <div className="p-2 space-y-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start h-8 text-xs font-medium"
+              onClick={() => handleSort('ASC')}
+            >
+              <ArrowUpAZ className="mr-2 h-4 w-4 text-muted-foreground" />
+              Sort A to Z
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start h-8 text-xs font-medium"
+              onClick={() => handleSort('DESC')}
+            >
+              <ArrowDownZA className="mr-2 h-4 w-4 text-muted-foreground" />
+              Sort Z to A
+            </Button>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between p-2">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Text Filters</span>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground hover:bg-transparent" onClick={handleClear}>Clear</Button>
+          </div>
+
+          <div className="px-2 pb-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-8 pl-8 text-xs focus-visible:ring-1"
+              />
+            </div>
+          </div>
+
+          <ScrollArea className="h-48 border-t">
+            <div className="p-2 space-y-1">
+              {filteredOptions.length === 0 && (
+                <p className="text-[10px] text-muted-foreground text-center py-4">No values found</p>
+              )}
+              <div
+                className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (selected.length === uniqueValues.length) {
+                    handleClear();
+                  } else {
+                    setFilters(prev => ({ ...prev, [columnKey]: uniqueValues }));
+                  }
+                }}
+              >
+                <Checkbox
+                  checked={selected.length === uniqueValues.length}
+                  className="h-3.5 w-3.5"
+                  onCheckedChange={() => {}}
+                />
+                <label className="text-[11px] font-medium leading-none cursor-pointer truncate">
+                  (Select All)
+                </label>
+              </div>
+              {filteredOptions.map((val) => (
+                <div
+                  key={val}
+                  className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors"
+                  onClick={(e) => { e.stopPropagation(); handleToggle(val); }}
+                >
+                  <Checkbox
+                    id={`filter-${columnKey}-${val}`}
+                    checked={selected.includes(val)}
+                    className="h-3.5 w-3.5"
+                    onCheckedChange={() => handleToggle(val)}
+                  />
+                  <label
+                    htmlFor={`filter-${columnKey}-${val}`}
+                    className="text-[11px] font-medium leading-none cursor-pointer truncate"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    {val}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
@@ -113,157 +285,6 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     };
   }, [isResizing, resize, stopResizing]);
 
-  const FilterHeader = useCallback(({ column }: { column: Column<any> }) => {
-    const columnKey = column.key;
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    const uniqueValues = useMemo(() => {
-      const values = data.map(row => String(row[columnKey] ?? 'None'));
-      return Array.from(new Set(values)).sort();
-    }, [columnKey]);
-
-    const filteredOptions = uniqueValues.filter(v => 
-      v.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const selected = filters[columnKey] || [];
-    const isSorted = sortConfig.columnKey === columnKey;
-
-    const handleToggle = (val: string) => {
-      setFilters(prev => {
-        const current = prev[columnKey] || [];
-        const next = current.includes(val) 
-          ? current.filter(item => item !== val) 
-          : [...current, val];
-        
-        if (next.length === 0) {
-          const newState = { ...prev };
-          delete newState[columnKey];
-          return newState;
-        }
-        return { ...prev, [columnKey]: next };
-      });
-    };
-
-    const handleClear = () => {
-      setFilters(prev => {
-        const next = { ...prev };
-        delete next[columnKey];
-        return next;
-      });
-    };
-
-    const handleSort = (direction: 'ASC' | 'DESC') => {
-      setSortConfig({ columnKey, direction });
-    };
-
-    return (
-      <div className="flex items-center justify-between w-full px-2 py-1 group">
-        <div className="flex items-center gap-1 min-w-0 flex-1">
-          <span className="font-bold text-xs uppercase tracking-wider truncate" title={column.name as string}>
-            {column.name}
-          </span>
-          {isSorted && (
-            sortConfig.direction === 'ASC' ? <SortAsc className="h-3 w-3 text-primary shrink-0" /> : <SortDesc className="h-3 w-3 text-primary shrink-0" />
-          )}
-        </div>
-        
-        <Popover>
-          <PopoverTrigger asChild>
-            <button 
-              className={cn(
-                "p-1 rounded hover:bg-muted transition-colors",
-                (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground opacity-0 group-hover:opacity-100"
-              )}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Filter className="h-3.5 w-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-64 p-0" align="start">
-            <div className="p-2 space-y-1">
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="w-full justify-start h-8 text-xs font-medium"
-                onClick={() => handleSort('ASC')}
-              >
-                <ArrowUpAZ className="mr-2 h-4 w-4 text-muted-foreground" />
-                Sort A to Z
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="w-full justify-start h-8 text-xs font-medium"
-                onClick={() => handleSort('DESC')}
-              >
-                <ArrowDownZA className="mr-2 h-4 w-4 text-muted-foreground" />
-                Sort Z to A
-              </Button>
-            </div>
-            
-            <Separator />
-
-            <div className="flex items-center justify-between p-2">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">Text Filters</span>
-              <Button variant="ghost" size="sm" className="h-6 text-[10px] text-muted-foreground hover:bg-transparent" onClick={handleClear}>Clear</Button>
-            </div>
-            
-            <div className="px-2 pb-2">
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input 
-                  placeholder="Search" 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 pl-8 text-xs focus-visible:ring-1"
-                />
-              </div>
-            </div>
-            
-            <ScrollArea className="h-48 border-t">
-              <div className="p-2 space-y-1">
-                {filteredOptions.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground text-center py-4">No values found</p>
-                )}
-                <div className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors" onClick={() => {
-                  if (selected.length === uniqueValues.length) {
-                    handleClear();
-                  } else {
-                    setFilters(prev => ({ ...prev, [columnKey]: uniqueValues }));
-                  }
-                }}>
-                  <Checkbox 
-                    checked={selected.length === uniqueValues.length} 
-                    className="h-3.5 w-3.5"
-                    onCheckedChange={() => {}}
-                  />
-                  <label className="text-[11px] font-medium leading-none cursor-pointer truncate">
-                    (Select All)
-                  </label>
-                </div>
-                {filteredOptions.map((val) => (
-                  <div key={val} className="flex items-center space-x-2 px-1 py-1 hover:bg-muted/50 rounded cursor-pointer transition-colors" onClick={() => handleToggle(val)}>
-                    <Checkbox 
-                      id={`filter-${columnKey}-${val}`} 
-                      checked={selected.includes(val)} 
-                      className="h-3.5 w-3.5"
-                    />
-                    <label 
-                      htmlFor={`filter-${columnKey}-${val}`}
-                      className="text-[11px] font-medium leading-none cursor-pointer truncate"
-                    >
-                      {val}
-                    </label>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
-  }, [data, filters, sortConfig]);
 
   const processedRows = useMemo(() => {
     let filtered = data.filter(row => {
@@ -344,10 +365,20 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
             </div>
           );
         },
-        renderHeaderCell: (props: any) => <FilterHeader column={props.column} />
+        renderHeaderCell: (props: any) => (
+          <FilterHeader
+            columnKey={props.column.key}
+            columnName={props.column.name}
+            data={data}
+            filters={filters}
+            setFilters={setFilters}
+            sortConfig={sortConfig}
+            setSortConfig={setSortConfig}
+          />
+        )
       }))
     ];
-  }, [propColumns, FilterHeader, currentPage, pageSize]);
+  }, [propColumns, data, filters, sortConfig, currentPage, pageSize]);
 
   const totalPages = Math.ceil(processedRows.length / pageSize);
   const pagedRows = useMemo(() => {
