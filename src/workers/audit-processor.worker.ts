@@ -32,18 +32,69 @@ const getRawTime = (ts: string | undefined): number => {
 const isAuditFormat = (row: any) =>
   'created_timestamp' in row && 'action' in row && 'entity_name' in row;
 
+// Some DB→CSV exports don't escape quotes/newlines inside the payload JSON blob properly.
+// That makes PapaParse (and Excel) lose track of column boundaries partway through a row,
+// so the rest of that record spills out as one or more garbled "fragment" rows — each
+// missing entity_name/action and holding a few stray characters in the wrong column.
+// Rather than dropping that data (losing evidence) or letting it fragment the grid across
+// many broken-looking rows, we glue every fragment following a real row back into a single
+// synthetic row so the whole mess lands in exactly one cell.
+const isFragmentRow = (event: any): boolean => {
+  const hasEntity = event.entity_name && String(event.entity_name).trim() !== '';
+  const hasAction = event.action && String(event.action).trim() !== '';
+  return !hasEntity || !hasAction;
+};
+
+const MAX_MERGED_FRAGMENT_CHARS = 200_000;
+
+const reassembleBrokenRows = (events: any[]): any[] => {
+  const result: any[] = [];
+  let fragmentBuffer: any[] = [];
+
+  const flushFragments = () => {
+    if (fragmentBuffer.length === 0) return;
+    const lastGood = result[result.length - 1];
+    let mergedText = fragmentBuffer
+      .map(row => Object.values(row).filter(v => v !== undefined && v !== null && v !== '').join(','))
+      .join('\n');
+    if (mergedText.length > MAX_MERGED_FRAGMENT_CHARS) {
+      mergedText = mergedText.slice(0, MAX_MERGED_FRAGMENT_CHARS) + '\n[TRUNCATED — fragment too large to display in full]';
+    }
+    result.push({
+      created_timestamp: lastGood?.created_timestamp ?? '',
+      action: 'PARSE_ERROR',
+      entity_name: 'UnparsedFragment',
+      entity_id: null,
+      parent_id: lastGood?.entity_id ?? null,
+      table_name: lastGood?.table_name ?? null,
+      payload: mergedText,
+      difference_list: null,
+      updated_by: null,
+      created_by: null,
+      tenant_id: lastGood?.tenant_id ?? null,
+    });
+    fragmentBuffer = [];
+  };
+
+  for (const event of events) {
+    if (isFragmentRow(event)) {
+      fragmentBuffer.push(event);
+    } else {
+      flushFragments();
+      result.push(event);
+    }
+  }
+  flushFragments();
+
+  return result;
+};
+
 const processAuditData = (events: any[]): any[] => {
   const audit = events.length > 0 && isAuditFormat(events[0]);
 
-  return events
-    .filter(event => {
-      if (!audit) return true;
-      // Drop blank/corrupted rows (CSV fragments from multi-line payloads or a corrupt export).
-      // A real audit event always has an action AND an entity_name.
-      const hasEntity = event.entity_name && String(event.entity_name).trim() !== '';
-      const hasAction = event.action && String(event.action).trim() !== '';
-      return hasEntity && hasAction;
-    })
+  const cleaned = audit ? reassembleBrokenRows(events) : events;
+
+  return cleaned
     .map((event, index) => {
       let parsed_payload: any = null;
       let parsed_difference_list: any = null;
