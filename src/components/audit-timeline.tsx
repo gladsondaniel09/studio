@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
-import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import {
   VerticalTimeline,
@@ -93,6 +92,7 @@ const getRawTime = (ts: string | undefined): number => {
 export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
+    payload_oversized?: boolean; // true when payload/difference_list was too large to JSON.parse
     _searchable_text: string | null; // Lazily computed on first search
     business_timestamp: string;
     raw_business_time: number;
@@ -205,10 +205,20 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
     }
 
     const lowerCaseAction = action.toLowerCase();
-    
+
     let formattedView = null;
-    
-    if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && parsed_payload) {
+
+    if (event.payload_oversized) {
+        const sizeKb = Math.round(((payload?.length ?? 0) + (difference_list?.length ?? 0)) / 1024).toLocaleString();
+        formattedView = (
+            <p className="text-sm text-muted-foreground italic">
+                This record's payload is too large ({sizeKb} KB) to parse into a structured view.
+                Expand "Raw Details" below to inspect the full content.
+            </p>
+        );
+    }
+
+    else if ((lowerCaseAction.includes('create') || lowerCaseAction.includes('insert')) && parsed_payload) {
         const entries = Object.entries(parsed_payload);
         if (entries.length > 0) {
             formattedView = <DetailView items={entries} type="key-value" />;
@@ -798,6 +808,7 @@ export default function AuditTimeline() {
 
   // Show a centered loader while switching views (heavy DataGrid/timeline mount)
   const [isSwitchingView, setIsSwitchingView] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const switchView = (view: 'timeline' | 'table') => {
     if (view === activeView) return;
     setIsSwitchingView(true);
@@ -1236,10 +1247,10 @@ export default function AuditTimeline() {
     }
 
     const dataToExport: any[] = [];
-    
+
     if (dataType === 'audit') {
         const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'USER', 'PAYLOAD', 'DIFFERENCE'];
-        
+
         filteredData.forEach(event => {
             const row: {[key: string]: any} = {};
             row['TIMESTAMP'] = event.business_timestamp;
@@ -1261,17 +1272,37 @@ export default function AuditTimeline() {
         });
     }
 
-    const csv = Papa.unparse(dataToExport);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    if (link.href) {
-        URL.revokeObjectURL(link.href);
-    }
-    link.href = URL.createObjectURL(blob);
-    link.download = `export_${new Date().toISOString()}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Serializing potentially tens of MB of text (large payload fields included) can take long
+    // enough to freeze the tab if done on the main thread — offload it to the worker instead.
+    setIsExporting(true);
+    const worker = new Worker(new URL('../workers/audit-processor.worker.ts', import.meta.url));
+    worker.onmessage = (e) => {
+      if (e.data.type === 'UNPARSE_COMPLETE') {
+        const blob = new Blob([e.data.csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.href) {
+            URL.revokeObjectURL(link.href);
+        }
+        link.href = URL.createObjectURL(blob);
+        link.download = `export_${new Date().toISOString()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        worker.terminate();
+        setIsExporting(false);
+      }
+      if (e.data.type === 'ERROR') {
+        toast({ variant: 'destructive', title: 'Export Failed', description: e.data.message });
+        worker.terminate();
+        setIsExporting(false);
+      }
+    };
+    worker.onerror = (e) => {
+      toast({ variant: 'destructive', title: 'Export Failed', description: e.message });
+      worker.terminate();
+      setIsExporting(false);
+    };
+    worker.postMessage({ type: 'UNPARSE_CSV', rows: dataToExport });
   }
 
   const navigateDetails = (direction: 'next' | 'prev') => {
@@ -1547,9 +1578,9 @@ export default function AuditTimeline() {
                     {filteredData.length.toLocaleString()}
                     {filteredData.length !== data.length && ` / ${data.length.toLocaleString()}`} records
                 </div>
-                <Button onClick={handleExport} variant="outline" className="w-full sm:w-auto">
-                    <Download className="mr-2 h-4 w-4" />
-                    Download CSV
+                <Button onClick={handleExport} disabled={isExporting} variant="outline" className="w-full sm:w-auto">
+                    {isExporting ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                    {isExporting ? 'Preparing…' : 'Download CSV'}
                 </Button>
                 <Button onClick={handleUploadNew} className="w-full sm:w-auto">Upload New File</Button>
           </div>

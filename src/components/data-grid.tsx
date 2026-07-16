@@ -48,6 +48,18 @@ function rowKeyGetter(row: ProcessedAuditEvent | GenericRow) {
   return (row as any).__k;
 }
 
+const CELL_TEXT_DISPLAY_CAP = 2_000;
+
+// Column filter dropdowns and sort build/compare a string per row for EVERY column, including
+// free-text ones like "payload" that can hold several megabytes for entities like PostHistoryEntity.
+// Truncating first bounds Set/sort/compare cost regardless of blob size — exact-value filtering on
+// a multi-MB JSON blob was never a meaningful use case anyway, so a truncated prefix is fine here.
+const FILTER_VALUE_CAP = 200;
+const getFilterableValue = (value: any): string => {
+  const s = String(value ?? 'None');
+  return s.length > FILTER_VALUE_CAP ? s.slice(0, FILTER_VALUE_CAP) : s;
+};
+
 const isJsonContent = (value: any): boolean => {
   if (typeof value !== 'string') return false;
   const trimmed = value.trim();
@@ -69,7 +81,7 @@ function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortCo
   const [open, setOpen] = useState(false);
 
   const uniqueValues = useMemo(() => {
-    const values = data.map(row => String(row[columnKey] ?? 'None'));
+    const values = data.map(row => getFilterableValue(row[columnKey]));
     return Array.from(new Set(values)).sort();
   }, [data, columnKey]);
 
@@ -290,7 +302,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
     let filtered = data.filter(row => {
       return Object.entries(filters).every(([key, allowedValues]) => {
         if (!allowedValues || allowedValues.length === 0) return true;
-        const cellValue = String(row[key] ?? 'None');
+        const cellValue = getFilterableValue(row[key]);
         return allowedValues.includes(cellValue);
       });
     });
@@ -304,7 +316,9 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         if (valA === null || valA === undefined) return 1;
         if (valB === null || valB === undefined) return -1;
 
-        const comparison = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+        // localeCompare's collation cost scales with string length — cap it so sorting by a
+        // free-text column (e.g. payload) with multi-MB values doesn't stall the sort.
+        const comparison = getFilterableValue(valA).localeCompare(getFilterableValue(valB), undefined, { numeric: true, sensitivity: 'base' });
         return sortConfig.direction === 'ASC' ? comparison : -comparison;
       });
     }
@@ -346,8 +360,13 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
         renderCell: ({ row }: { row: any }) => {
           const value = row[col.key];
           const isJson = isJsonContent(value);
+          // The cell is visually clipped via CSS truncate anyway — capping the actual DOM text
+          // avoids the browser having to lay out a multi-MB single-line text node while scrolling
+          // (some entities carry payloads several MB in size).
+          const rawText = String(value ?? '');
+          const cellText = rawText.length > CELL_TEXT_DISPLAY_CAP ? rawText.slice(0, CELL_TEXT_DISPLAY_CAP) + '…' : rawText;
           return (
-            <div 
+            <div
               className={cn(
                 "truncate whitespace-nowrap px-2 text-xs h-full flex items-center",
                 isJson && "cursor-pointer hover:text-primary transition-colors font-medium hover:underline"
@@ -361,7 +380,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                 }
               }}
             >
-              {String(value ?? '')}
+              {cellText}
             </div>
           );
         },

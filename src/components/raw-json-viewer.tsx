@@ -12,6 +12,12 @@ interface RawJsonViewerProps {
   title: string;
 }
 
+// Some entities can carry payloads several megabytes in size. Pretty-printing (JSON.stringify with
+// indentation can produce an even bigger string than the input) and re-running a regex split over
+// the whole thing on every search keystroke is exactly the kind of unbounded work that freezes the
+// tab for content this large — past this threshold we skip both and show the raw text instead.
+const LARGE_CONTENT_THRESHOLD = 200_000;
+
 /**
  * A reusable component for viewing raw JSON with search and copy capabilities.
  * Enhanced for high-fidelity forensic inspection.
@@ -29,14 +35,17 @@ export const RawJsonViewer = ({ jsonString, title }: RawJsonViewerProps) => {
     );
   }
 
+  const isOversized = jsonString.length > LARGE_CONTENT_THRESHOLD;
+
   const formattedJson = useMemo(() => {
+    if (isOversized) return jsonString;
     try {
       const parsed = JSON.parse(jsonString);
       return JSON.stringify(parsed, null, 2);
     } catch (e) {
       return jsonString;
     }
-  }, [jsonString]);
+  }, [jsonString, isOversized]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(formattedJson);
@@ -46,7 +55,7 @@ export const RawJsonViewer = ({ jsonString, title }: RawJsonViewerProps) => {
   };
 
   const highlightedJson = useMemo(() => {
-    if (!searchTerm) return formattedJson;
+    if (!searchTerm || isOversized) return formattedJson;
     const parts = formattedJson.split(new RegExp(`(${searchTerm})`, 'gi'));
     return (
       <span>
@@ -88,6 +97,11 @@ export const RawJsonViewer = ({ jsonString, title }: RawJsonViewerProps) => {
           </Button>
         </div>
       </div>
+      {isOversized && (
+        <p className="px-4 py-1.5 text-[10px] text-muted-foreground italic bg-muted/20 border-b shrink-0">
+          {`Large payload (${(jsonString.length / 1024).toFixed(0)} KB) — showing raw text; formatting and search-highlighting are skipped for performance. Use your browser's Ctrl+F to search.`}
+        </p>
+      )}
       <ScrollArea className="flex-1 bg-[#F8F9FB] dark:bg-[#0D1117]">
         <div className="p-6 select-text selection:bg-primary/20">
           <pre className="font-mono text-[12px] leading-relaxed text-foreground/90 whitespace-pre">
