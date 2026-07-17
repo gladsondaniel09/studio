@@ -82,7 +82,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
   return (
     <div className="w-full">
         <Card>
-            <CardContent className="p-2">
+            <CardContent className="p-1.5">
                 <div className="flex items-center justify-between">
                 {flowStages.map((stage, index) => (
                     <div key={stage.name} className="flex items-center w-full">
@@ -90,7 +90,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                         variant="ghost"
                         onClick={() => onStageClick(stage.entities)}
                         className={cn(
-                            'flex flex-col items-center text-center gap-1 w-full h-auto p-1 rounded-md transition-all',
+                            'flex items-center justify-center gap-1.5 w-full h-auto py-1 px-1.5 rounded-md transition-all',
                             selectedEntities && JSON.stringify(selectedEntities) === JSON.stringify(stage.entities)
                                 ? 'bg-primary/20'
                                 : ''
@@ -98,7 +98,7 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                     >
                         <div
                         className={cn(
-                            'flex items-center justify-center w-8 h-8 rounded-full border transition-all',
+                            'flex items-center justify-center w-6 h-6 rounded-full border shrink-0 transition-all',
                             activeStages.has(stage.name)
                             ? 'bg-primary/10 border-primary text-primary'
                             : 'bg-muted border-border text-muted-foreground',
@@ -107,12 +107,12 @@ export default function FlowChart({ data, onStageClick, selectedEntities }: Flow
                                 : ''
                         )}
                         >
-                        <stage.icon className="w-4 h-4" />
+                        <stage.icon className="w-3.5 h-3.5" />
                         </div>
-                        <p className="text-[10px] font-bold font-headline text-foreground">{stage.name}</p>
+                        <p className="text-[11px] font-bold font-headline text-foreground truncate">{stage.name}</p>
                     </Button>
                     {index < flowStages.length - 1 && (
-                        <ChevronRight className="w-6 h-6 text-muted-foreground/50 mx-1 hidden sm:block" />
+                        <ChevronRight className="w-4 h-4 text-muted-foreground/50 mx-1 hidden sm:block shrink-0" />
                     )}
                     </div>
                 ))}

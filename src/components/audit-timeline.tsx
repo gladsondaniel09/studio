@@ -1526,13 +1526,13 @@ export default function AuditTimeline() {
                 </DialogContent>
             </Dialog>
 
-          <header className="flex-none flex justify-between items-start pt-4 px-4 md:pt-8 md:px-8">
-              <div className='flex items-center gap-3'>
-                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+          <header className="flex-none flex justify-between items-center pt-3 px-4 md:pt-4 md:px-8">
+              <div className='flex items-center gap-2'>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
                     <circle cx="12" cy="12" r="3"/>
                   </svg>
-                  <h1 className="text-2xl font-bold font-headline text-foreground">
+                  <h1 className="text-lg font-bold font-headline text-foreground">
                     {dataType === 'audit' ? 'Audit Log Explorer' : 'Data Explorer'}
                   </h1>
               </div>
@@ -1555,11 +1555,11 @@ export default function AuditTimeline() {
                   <ThemeToggle />
               </div>
           </header>
-            {dataType === 'audit' && <div id="flow-chart-card" className='px-4 md:px-8 mt-4'>
+            {dataType === 'audit' && <div id="flow-chart-card" className='px-4 md:px-8 mt-2'>
                  <FlowChart data={data} onStageClick={handleStageClick} selectedEntities={selectedFlowEntities} />
             </div>}
-          
-          <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-4 mt-8 px-4 md:px-8">
+
+          <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-3 mt-3 px-4 md:px-8">
                 {dataType === 'audit' && (
                     <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
                         <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => switchView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
