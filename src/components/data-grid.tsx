@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useTheme } from 'next-themes';
 import DataGrid, { Column } from 'react-data-grid';
 import 'react-data-grid/lib/styles.css';
 import { ProcessedAuditEvent } from './audit-timeline';
@@ -245,6 +246,16 @@ function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortCo
 }
 
 export default function ResizableDataGrid({ data, columns: propColumns, dataType }: DataGridProps) {
+  // react-data-grid ships its own light/dark theme classes with their own background/text
+  // color variables, separate from the app's own CSS variables — hardcoding "rdg-light" left
+  // the table stuck with a light header/background even when the rest of the app is in dark
+  // mode. Mount check avoids a hydration mismatch (next-themes only knows the resolved theme
+  // after mount).
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const rdgThemeClass = mounted && resolvedTheme === 'dark' ? 'rdg-dark' : 'rdg-light';
+
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ columnKey: null, direction: null });
   const [selectedRow, setSelectedRow] = useState<any | null>(null);
@@ -468,7 +479,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
               "cursor-pointer transition-colors",
               isRowSelected(row) ? "bg-primary/10 font-medium" : "hover:bg-muted/30"
             )}
-            className="rdg-light h-full border-none"
+            className={cn(rdgThemeClass, "h-full border-none")}
             style={{ height: '100%' }}
           />
         </div>
