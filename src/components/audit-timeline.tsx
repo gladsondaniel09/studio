@@ -879,10 +879,14 @@ export default function AuditTimeline() {
 
   const uploadWalkthroughSteps: Step[] = [
     { element: '#upload-card', title: 'Upload Your Data', content: 'Upload a CSV, XLSX, or JSON file. The app will dynamically adapt to its structure.' },
+    { element: '#upload-session-history-button', title: 'Session History', content: "Every file you upload is saved here automatically — customer, symptom, and all. Come back anytime to re-open a past file or re-run a saved analysis without hunting down and re-uploading the same export again.", placement: 'bottom' },
   ];
 
   const timelineWalkthroughSteps: Step[] = [
+    { element: '#ai-actions', title: 'AI-Powered Investigation', content: "Forensic Analyse produces a structured root-cause report (evidence, confidence, recommended fix). Replicate turns the same logs into exact step-by-step instructions to reproduce the issue in Xceler.", placement: 'bottom' },
+    { element: '#session-history-button', title: 'Session History', content: "Click here anytime to browse every file you've uploaded. Use the eye icon to reload a past file's data, or reopen a saved analysis to re-run it with the same context — no re-uploading needed.", placement: 'bottom' },
     { element: '#flow-chart-card', title: 'Business Process Flow', content: 'This chart shows the stages of your process. Click a stage to filter the timeline.', placement: 'bottom' },
+    { element: '#view-toggle', title: 'Timeline & Table Views', content: 'Switch between a chronological Timeline and a spreadsheet-style Table with sortable, filterable columns and row numbers.', placement: 'bottom' },
     { element: '#search-bar', title: 'Search Logs', content: 'Perform a deep search on all event details, including raw JSON payloads.', placement: 'bottom' },
     { element: '#filter-controls', title: 'Filter & Sort', content: 'Refine the timeline by filtering on specific actions or entities and sorting by date.', placement: 'bottom' },
     { element: '#timeline-event-card', title: 'Timeline Events', content: 'Each card represents an audit event. Click the expand icon for full details.', placement: 'bottom' },
@@ -1554,7 +1558,7 @@ export default function AuditTimeline() {
               </div>
                <div className="flex-shrink-0 flex items-center gap-2">
                   {dataType === 'audit' && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" id="ai-actions">
                         <Button onClick={handleAnalyze} disabled={isAnalyzing} className="shadow-lg shadow-primary/20">
                             {isAnalyzing ? <Loader className="mr-2 animate-spin" /> : <Sparkles className="mr-2" />}
                             Forensic Analyse
@@ -1565,9 +1569,14 @@ export default function AuditTimeline() {
                         </Button>
                     </div>
                   )}
-                  <Button variant="ghost" size="icon" title="Session History" onClick={() => setSidebarOpen(v => !v)}>
+                  <Button variant="ghost" size="icon" title="Session History" id="session-history-button" onClick={() => setSidebarOpen(v => !v)}>
                       <History className="w-5 h-5" />
                   </Button>
+                  {dataType === 'audit' && (
+                    <Button variant="ghost" size="icon" title="Show tour" onClick={() => setShowTimelineWalkthrough(true)}>
+                        <HelpCircle className="w-5 h-5" />
+                    </Button>
+                  )}
                   <ThemeToggle />
               </div>
           </header>
@@ -1577,7 +1586,7 @@ export default function AuditTimeline() {
 
           <div id="filter-controls" className="flex-none flex flex-wrap items-center gap-2 mb-3 mt-3 px-4 md:px-8">
                 {dataType === 'audit' && (
-                    <div className='flex items-center gap-2 p-1 rounded-lg bg-muted'>
+                    <div className='flex items-center gap-2 p-1 rounded-lg bg-muted' id="view-toggle">
                         <Button variant={activeView === 'timeline' ? 'secondary' : 'ghost'} size="sm" onClick={() => switchView('timeline')}><List className="mr-2 h-4 w-4" />Timeline</Button>
                         <Button variant={activeView === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => switchView('table')}><TableIcon className="mr-2 h-4 w-4" />Table</Button>
                     </div>
@@ -1703,7 +1712,7 @@ export default function AuditTimeline() {
         <div className="flex flex-col items-center justify-center flex-1 min-w-0">
         <Walkthrough steps={uploadWalkthroughSteps} isOpen={showUploadWalkthrough} onClose={() => setShowUploadWalkthrough(false)} />
         <div className="w-full max-w-lg text-right mb-4 flex justify-end items-center gap-2">
-            <Button variant="ghost" size="icon" title="Session History" onClick={() => setSidebarOpen(v => !v)}><History className="w-5 h-5" /></Button>
+            <Button variant="ghost" size="icon" title="Session History" id="upload-session-history-button" onClick={() => setSidebarOpen(v => !v)}><History className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={() => setShowUploadWalkthrough(true)}><HelpCircle className="w-5 h-5" /></Button>
             <ThemeToggle />
         </div>

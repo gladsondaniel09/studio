@@ -108,9 +108,14 @@ export function Walkthrough({ steps, isOpen, onClose }: WalkthroughProps) {
                         <p className="text-sm text-muted-foreground">{step.content}</p>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">
-                            {currentStep + 1} / {steps.length}
-                        </span>
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground">
+                                {currentStep + 1} / {steps.length}
+                            </span>
+                            <Button variant="link" size="sm" className="h-auto p-0 text-muted-foreground" onClick={handleClose}>
+                                Skip tour
+                            </Button>
+                        </div>
                         <div className="flex gap-2">
                             {currentStep > 0 && (
                                 <Button variant="outline" size="sm" onClick={handlePrev}>
