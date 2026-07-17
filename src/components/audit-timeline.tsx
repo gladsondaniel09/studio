@@ -904,7 +904,7 @@ export default function AuditTimeline() {
     }
   };
 
-  const processFile = (targetFile: File, afterProcess?: () => void) => {
+  const processFile = (targetFile: File, afterProcess?: () => void, existingSessionId?: string) => {
       setIsProcessingFile(true);
       setUploadProgress(0);
       setProcessedCount(0);
@@ -938,12 +938,18 @@ export default function AuditTimeline() {
           setFileName(targetFile.name);
           setIsProcessingFile(false);
 
-          // Save session to Firestore + Storage in background (fire-and-forget)
-          const snippet = JSON.stringify(processedData.slice(0, 3)).slice(0, 200);
-          const { sessionId, saveAsync } = createSessionRef(firestore);
-          setCurrentSessionId(sessionId);
-          saveAsync(targetFile, processedData.length, snippet)
-              .catch(e => console.error('[SESSION_SAVE_ERROR]', e));
+          if (existingSessionId) {
+              // Restoring a previously-saved session — the file is already in Storage/Firestore,
+              // so reuse its session id instead of re-uploading a duplicate copy.
+              setCurrentSessionId(existingSessionId);
+          } else {
+              // Save session to Firestore + Storage in background (fire-and-forget)
+              const snippet = JSON.stringify(processedData.slice(0, 3)).slice(0, 200);
+              const { sessionId, saveAsync } = createSessionRef(firestore);
+              setCurrentSessionId(sessionId);
+              saveAsync(targetFile, processedData.length, snippet)
+                  .catch(e => console.error('[SESSION_SAVE_ERROR]', e));
+          }
 
           afterProcess?.();
       };
@@ -1021,18 +1027,24 @@ export default function AuditTimeline() {
       processFile(file);
   };
 
-  const handleRestoreAnalysis = ({ buffer, fileName: restoredName, context, pendingAction: action }: RestoreParams) => {
+  const handleRestoreAnalysis = ({ buffer, fileName: restoredName, sessionId, context, pendingAction: action }: RestoreParams) => {
       const isXlsx = restoredName.endsWith('.xlsx');
       const isJson = restoredName.endsWith('.json');
       const mimeType = isXlsx
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           : isJson ? 'application/json' : 'text/csv';
       const restoredFile = new File([buffer], restoredName, { type: mimeType });
-      processFile(restoredFile, () => {
-          setInvestigationContext(context);
-          setPendingAction(action);
-          setShowContextForm(true);
-      });
+      // context/pendingAction are only present when restoring a specific saved analysis to
+      // re-run it — a plain "View data" click just loads the session's file with no further action.
+      if (context && action) {
+          processFile(restoredFile, () => {
+              setInvestigationContext(context);
+              setPendingAction(action);
+              setShowContextForm(true);
+          }, sessionId);
+      } else {
+          processFile(restoredFile, undefined, sessionId);
+      }
   };
 
   const handleUploadNew = () => {

@@ -15,14 +15,17 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered, CheckCircle2, Ban } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered, CheckCircle2, Ban, Eye } from 'lucide-react';
 
 export type RestoreParams = {
   buffer: ArrayBuffer;
   fileName: string;
   storageRef: string;
-  context: InvestigationContext;
-  pendingAction: 'analyse' | 'replicate';
+  sessionId: string;
+  // Present when restoring a saved analysis (re-run with its context); absent when just
+  // viewing the session's raw data with no analysis to resume.
+  context?: InvestigationContext;
+  pendingAction?: 'analyse' | 'replicate';
 };
 
 type Props = {
@@ -44,6 +47,7 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
   const [loadingAnalysesId, setLoadingAnalysesId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [viewingId, setViewingId] = useState<string | null>(null);
 
   const handleToggle = async (session: SessionDocWithId) => {
     if (expandedId === session.id) {
@@ -70,6 +74,7 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
         buffer,
         fileName: session.fileName,
         storageRef: session.storageRef,
+        sessionId: session.id,
         context: analysis.context,
         pendingAction: analysis.type === 'forensic' ? 'analyse' : 'replicate',
       });
@@ -77,6 +82,23 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
       console.error('[RESTORE_ERROR]', e);
     } finally {
       setRestoringId(null);
+    }
+  };
+
+  const handleView = async (session: SessionDocWithId) => {
+    setViewingId(session.id);
+    try {
+      const buffer = await downloadSessionFile(session.storageRef);
+      onRestoreAnalysis({
+        buffer,
+        fileName: session.fileName,
+        storageRef: session.storageRef,
+        sessionId: session.id,
+      });
+    } catch (e) {
+      console.error('[VIEW_SESSION_ERROR]', e);
+    } finally {
+      setViewingId(null);
     }
   };
 
@@ -97,7 +119,7 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
     <aside className="w-72 shrink-0 border-r bg-card flex flex-col h-full overflow-hidden">
       <div className="px-3 py-3 border-b shrink-0">
         <p className="font-semibold text-sm">Session History</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Click an analysis to re-run with saved context</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">Click the eye icon to view data, or an analysis to re-run it</p>
       </div>
 
       <ScrollArea className="flex-1">
@@ -117,6 +139,7 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
             const isCurrent = session.id === currentSessionId;
             const isExpanded = expandedId === session.id;
             const isDeleting = deletingId === session.id;
+            const isViewing = viewingId === session.id;
             const sessionAnalyses = analyses[session.id];
 
             return (
@@ -152,6 +175,19 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
                       </div>
                     </div>
                   </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                    onClick={() => handleView(session)}
+                    disabled={isViewing}
+                    title="View data"
+                  >
+                    {isViewing
+                      ? <Loader className="h-3 w-3 animate-spin" />
+                      : <Eye className="h-3 w-3" />
+                    }
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
