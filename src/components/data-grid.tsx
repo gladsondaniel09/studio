@@ -136,7 +136,7 @@ function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortCo
           <button
             className={cn(
               "p-1 rounded hover:bg-muted transition-colors",
-              (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+              (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground"
             )}
             onClick={(e) => e.stopPropagation()}
           >
@@ -219,7 +219,11 @@ function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortCo
                     id={`filter-${columnKey}-${val}`}
                     checked={selected.includes(val)}
                     className="h-3.5 w-3.5"
-                    onCheckedChange={() => handleToggle(val)}
+                    // The wrapping div's onClick already calls handleToggle(val) for any click
+                    // inside this row (checkbox or label) and bubbling would otherwise fire this
+                    // a second time — toggling straight back off. Keep this a no-op, same as the
+                    // "Select All" checkbox above.
+                    onCheckedChange={() => {}}
                   />
                   <label
                     htmlFor={`filter-${columnKey}-${val}`}
