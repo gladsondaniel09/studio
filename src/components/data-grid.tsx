@@ -135,15 +135,17 @@ function FilterHeader({ columnKey, columnName, data, filters, setFilters, sortCo
         <PopoverTrigger asChild>
           <button
             className={cn(
-              "p-1 rounded hover:bg-muted transition-colors",
-              (selected.length > 0 || isSorted) ? "text-primary bg-primary/10" : "text-muted-foreground"
+              "p-1 rounded border transition-colors hover:bg-muted",
+              (selected.length > 0 || isSorted)
+                ? "text-primary bg-primary/10 border-primary/30"
+                : "text-muted-foreground border-border/60"
             )}
             onClick={(e) => e.stopPropagation()}
           >
             <Filter className="h-3.5 w-3.5" />
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start" onInteractOutside={(e) => e.preventDefault()} onOpenAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent className="w-64 p-0" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
           <div className="p-2 space-y-1">
             <Button
               variant="ghost"
@@ -332,6 +334,20 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
 
   const columns = useMemo((): Column<any>[] => {
     return [
+      {
+        key: 'rowNumber',
+        name: '#',
+        minWidth: 48,
+        width: 48,
+        resizable: false,
+        frozen: true,
+        headerCellClass: 'text-center',
+        renderCell: ({ rowIdx }: { rowIdx: number }) => (
+          <div className="flex items-center justify-center h-full w-full text-[11px] text-muted-foreground bg-muted/40 select-none">
+            {(currentPage - 1) * pageSize + rowIdx + 1}
+          </div>
+        ),
+      },
       {
         key: 'expand',
         name: '',

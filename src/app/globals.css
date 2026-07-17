@@ -112,14 +112,15 @@ body {
 }
 
 /* react-data-grid (Table view) doesn't ship vertical cell borders by default in this version —
-   only its own row separators. Add explicit grid lines using the app's theme border color so the
-   table reads as a bordered grid in both light and dark mode. */
+   only its own row separators. Add subtle grid lines using the app's own theme border token
+   (at reduced opacity, so it reads as part of the app's existing UI rather than a stark
+   spreadsheet grid) in both light and dark mode. */
 .rdg-cell {
-  border-inline-end: 1px solid hsl(var(--border)) !important;
-  border-block-end: 1px solid hsl(var(--border)) !important;
+  border-inline-end: 1px solid hsl(var(--border) / 0.5) !important;
+  border-block-end: 1px solid hsl(var(--border) / 0.5) !important;
 }
 
 .rdg-header-row .rdg-cell {
-  border-block-end: 2px solid hsl(var(--border)) !important;
-  background-color: hsl(var(--muted) / 0.4);
+  border-block-end: 1px solid hsl(var(--border)) !important;
+  background-color: hsl(var(--muted) / 0.3);
 }
