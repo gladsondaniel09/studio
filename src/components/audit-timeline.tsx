@@ -97,7 +97,8 @@ export type ProcessedAuditEvent = AuditEvent & {
     _searchable_text: string | null; // Lazily computed on first search
     business_timestamp: string;
     raw_business_time: number;
-    display_user: string | null;
+    display_created_by: string | null;
+    display_updated_by: string | null;
 };
 
 const getIconForEvent = (eventType: string) => {
@@ -244,7 +245,7 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
             formattedView = <p className="text-sm mt-4">{payload}</p>;
         }
     } else {
-        const { created_timestamp, entity_name, action: evtAction, user, _searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_user, ...otherDetails } = event;
+        const { created_timestamp, entity_name, action: evtAction, user, _searchable_text, parsed_payload, parsed_difference_list, business_timestamp, raw_business_time, display_created_by, display_updated_by, ...otherDetails } = event;
         const detailsToShow = Object.entries(otherDetails).filter(([key, value]) => value && value !== 'NULL');
 
         if (detailsToShow.length > 0) {
@@ -784,7 +785,8 @@ const AUDIT_LOG_COLUMNS = [
     { key: 'entity_name', name: 'ENTITY' },
     { key: 'entity_id', name: 'ENTITY ID' },
     { key: 'action', name: 'ACTION' },
-    { key: 'display_user', name: 'USER' },
+    { key: 'display_created_by', name: 'CREATED BY' },
+    { key: 'display_updated_by', name: 'UPDATED BY' },
     { key: 'payload', name: 'PAYLOAD' },
 ];
 
@@ -918,7 +920,7 @@ export default function AuditTimeline() {
               return;
           }
           const firstRow = processedData[0];
-          const headers = Object.keys(firstRow).filter(k => !k.startsWith('_') && k !== 'parsed_payload' && k !== 'parsed_difference_list' && k !== 'business_timestamp' && k !== 'raw_business_time' && k !== 'display_user');
+          const headers = Object.keys(firstRow).filter(k => !k.startsWith('_') && k !== 'parsed_payload' && k !== 'parsed_difference_list' && k !== 'business_timestamp' && k !== 'raw_business_time' && k !== 'display_created_by' && k !== 'display_updated_by');
           const isAuditLog = ['created_timestamp', 'action', 'entity_name'].every(h => headers.includes(h));
           setData(processedData);
           if (isAuditLog) {
@@ -1096,7 +1098,8 @@ export default function AuditTimeline() {
                     entity_id: e.entity_id,
                     parent_id: e.parent_id,
                     table_name: e.table_name,
-                    user: e.display_user,
+                    created_by: e.display_created_by,
+                    updated_by: e.display_updated_by,
                     payload: e.payload !== 'NULL' ? e.payload : undefined,
                     differences: e.difference_list !== 'NULL' ? e.difference_list : undefined
                 }, (key, value) => value === undefined ? undefined : value)).join('\n');
@@ -1215,7 +1218,7 @@ export default function AuditTimeline() {
           const rawDiff = typeof event.difference_list === 'string' ? event.difference_list.slice(0, SEARCH_TEXT_FIELD_CAP) : '';
           event._searchable_text = [
             event.created_timestamp, event.business_timestamp, event.action, event.entity_name,
-            event.entity_id, event.parent_id, event.table_name, event.display_user,
+            event.entity_id, event.parent_id, event.table_name, event.display_created_by, event.display_updated_by,
             event.user?.name, event.user?.email, event.updated_by, event.created_by, event.tenant_id,
             rawPayload, rawDiff,
           ].filter(Boolean).join(' ').toLowerCase();
@@ -1257,7 +1260,7 @@ export default function AuditTimeline() {
     const dataToExport: any[] = [];
 
     if (dataType === 'audit') {
-        const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'USER', 'PAYLOAD', 'DIFFERENCE'];
+        const headers = ['TIMESTAMP', 'ENTITY', 'ENTITY ID', 'ACTION', 'CREATED BY', 'UPDATED BY', 'PAYLOAD', 'DIFFERENCE'];
 
         filteredData.forEach(event => {
             const row: {[key: string]: any} = {};
@@ -1265,7 +1268,8 @@ export default function AuditTimeline() {
             row['ENTITY'] = event.entity_name;
             row['ENTITY ID'] = event.entity_id || '';
             row['ACTION'] = event.action;
-            row['USER'] = event.display_user || '';
+            row['CREATED BY'] = event.display_created_by || '';
+            row['UPDATED BY'] = event.display_updated_by || '';
             row['PAYLOAD'] = event.payload === 'NULL' ? '' : event.payload;
             row['DIFFERENCE'] = event.difference_list === 'NULL' ? '' : event.difference_list;
             dataToExport.push(row);

@@ -189,14 +189,13 @@ const processAuditData = (events: any[]): any[] => {
 
       // Prefer the row-level created_by/updated_by columns (always present, regardless of payload
       // size or casing) over digging into the parsed payload, which uses inconsistent key casing
-      // (createdBy/createdby/created_by depending on export) across entity types.
-      let display_user: string | null = null;
-      const actionLower = (event.action || '').toLowerCase();
-      if (actionLower.includes('create')) {
-        display_user = event.created_by || parsed_payload?.createdBy || parsed_payload?.createdby || parsed_payload?.created_by || null;
-      } else if (actionLower.includes('update')) {
-        display_user = event.updated_by || parsed_payload?.updatedBy || parsed_payload?.updatedby || parsed_payload?.updated_by || null;
-      }
+      // (createdBy/createdby/created_by depending on export) across entity types. Computed
+      // unconditionally (not gated by action type) — a Delete or other action's payload snapshot
+      // can still carry both fields from the record's original create/update history.
+      const display_created_by: string | null =
+        event.created_by || parsed_payload?.createdBy || parsed_payload?.createdby || parsed_payload?.created_by || null;
+      const display_updated_by: string | null =
+        event.updated_by || parsed_payload?.updatedBy || parsed_payload?.updatedby || parsed_payload?.updated_by || null;
 
       return {
         ...event,
@@ -215,7 +214,8 @@ const processAuditData = (events: any[]): any[] => {
         _searchable_text: null,
         business_timestamp,
         raw_business_time,
-        display_user,
+        display_created_by,
+        display_updated_by,
       };
     });
 };
