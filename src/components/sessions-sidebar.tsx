@@ -15,7 +15,7 @@ import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered, CheckCircle2, Ban, Eye } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronRight, Loader, Clock, FlaskConical, ListOrdered, CheckCircle2, Ban, Eye, PanelLeftClose } from 'lucide-react';
 
 export type RestoreParams = {
   buffer: ArrayBuffer;
@@ -31,9 +31,10 @@ export type RestoreParams = {
 type Props = {
   currentSessionId: string | null;
   onRestoreAnalysis: (params: RestoreParams) => void;
+  onClose: () => void;
 };
 
-export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }: Props) {
+export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis, onClose }: Props) {
   const firestore = useFirestore();
 
   const sessionsQuery = useMemoFirebase(
@@ -117,9 +118,20 @@ export default function SessionsSidebar({ currentSessionId, onRestoreAnalysis }:
 
   return (
     <aside className="w-72 shrink-0 border-r bg-card flex flex-col h-full overflow-hidden">
-      <div className="px-3 py-3 border-b shrink-0">
-        <p className="font-semibold text-sm">Session History</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Click the eye icon to view data, or an analysis to re-run it</p>
+      <div className="px-3 py-3 border-b shrink-0 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-sm">Session History</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Click the eye icon to view data, or an analysis to re-run it</p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0 text-muted-foreground"
+          onClick={onClose}
+          title="Collapse sidebar"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </Button>
       </div>
 
       <ScrollArea className="flex-1">

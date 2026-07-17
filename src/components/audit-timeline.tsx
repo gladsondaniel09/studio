@@ -1350,6 +1350,7 @@ export default function AuditTimeline() {
             <SessionsSidebar
               currentSessionId={currentSessionId}
               onRestoreAnalysis={handleRestoreAnalysis}
+              onClose={() => setSidebarOpen(false)}
             />
           )}
           <div className='flex flex-col flex-1 min-w-0 overflow-hidden'>
@@ -1707,6 +1708,7 @@ export default function AuditTimeline() {
           <SessionsSidebar
             currentSessionId={currentSessionId}
             onRestoreAnalysis={handleRestoreAnalysis}
+            onClose={() => setSidebarOpen(false)}
           />
         )}
         <div className="flex flex-col items-center justify-center flex-1 min-w-0">
