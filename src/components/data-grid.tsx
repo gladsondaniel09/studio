@@ -591,8 +591,12 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
           </div>
 
           {/* Forensic Inspector Sidebar */}
-          <div 
-            className="h-full bg-card border-l shadow-2xl flex flex-col shrink-0 animate-in slide-in-from-right duration-200"
+          <div
+            // min-w-0 overrides the flex item's default min-width:auto — without it, this panel
+            // could grow past panelWidth to fit a wide <pre> line inside RawJsonViewer instead of
+            // staying clamped, so the content never actually overflows its own ScrollArea (it just
+            // gets silently clipped by the root container's overflow-hidden, with no scrollbar).
+            className="h-full bg-card border-l shadow-2xl flex flex-col shrink-0 min-w-0 animate-in slide-in-from-right duration-200"
             style={{ width: `${panelWidth}px` }}
           >
             <div className="p-6 border-b shrink-0 flex flex-row items-center justify-between">
@@ -609,7 +613,7 @@ export default function ResizableDataGrid({ data, columns: propColumns, dataType
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            <div className="flex-grow min-h-0">
+            <div className="flex-grow min-h-0 min-w-0">
                <RawJsonViewer jsonString={drawerJson} title={drawerTitle} />
             </div>
           </div>
