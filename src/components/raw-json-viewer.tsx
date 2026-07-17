@@ -16,7 +16,7 @@ interface RawJsonViewerProps {
 // indentation can produce an even bigger string than the input) and re-running a regex split over
 // the whole thing on every search keystroke is exactly the kind of unbounded work that freezes the
 // tab for content this large — past this threshold we skip both and show the raw text instead.
-const LARGE_CONTENT_THRESHOLD = 200_000;
+const LARGE_CONTENT_THRESHOLD = 400_000;
 
 /**
  * A reusable component for viewing raw JSON with search and copy capabilities.

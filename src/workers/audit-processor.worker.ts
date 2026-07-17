@@ -95,7 +95,28 @@ const reassembleBrokenRows = (events: any[]): any[] => {
 // object graph into the postMessage sent back to the main thread, is enough to stall the UI. Past
 // this size we skip structural parsing and pull just the one field (updatedTimestamp) we need via a
 // cheap regex instead; the full raw string is still kept and remains viewable via Raw Details.
-const MAX_PARSE_CHARS = 200_000;
+// This threshold is checked AFTER stripEmbeddedDocuments() below, so it only limits how much
+// legitimate business text (not embedded files) a single row can have — 400KB of real JSON still
+// parses in well under 100ms, so this is a generous ceiling, not a performance-critical one.
+const MAX_PARSE_CHARS = 400_000;
+
+// Most of that bulk is usually a single embedded file (e.g. an invoiceDocument field holding a
+// base64-encoded PDF), not audit-trail data. A long run of base64-alphabet characters has no other
+// legitimate reason to appear in an audit log field, so stripping it — regardless of which field it's
+// nested under, at whatever escaping depth — reliably shrinks the row back down to its real business
+// data (amounts, dates, IDs) and lets it parse structurally again instead of falling back to raw text.
+const BASE64_BLOB_MIN_LENGTH = 500;
+const BASE64_BLOB_REGEX = new RegExp(`[A-Za-z0-9+/]{${BASE64_BLOB_MIN_LENGTH},}={0,2}`, 'g');
+
+const stripEmbeddedDocuments = (raw: string): { text: string; count: number } => {
+  let count = 0;
+  const text = raw.replace(BASE64_BLOB_REGEX, (match) => {
+    count++;
+    const approxKb = Math.round((match.length * 0.75) / 1024);
+    return `[EMBEDDED_DOCUMENT_REMOVED ~${approxKb}KB]`;
+  });
+  return { text, count };
+};
 
 const extractUpdatedTimestamp = (raw: string): string | null => {
   const match = raw.match(/"updated[_]?[Tt]imestamp"\s*:\s*"([^"]+)"/);
@@ -113,14 +134,29 @@ const processAuditData = (events: any[]): any[] => {
       let parsed_difference_list: any = null;
       let payload_updated_ts: string | null = null;
       let payload_oversized = false;
+      let documents_stripped_count = 0;
 
-      if (event.payload && event.payload !== 'NULL') {
-        if (event.payload.length > MAX_PARSE_CHARS) {
+      let payload = event.payload;
+      let difference_list = event.difference_list;
+
+      if (payload && payload !== 'NULL') {
+        const stripped = stripEmbeddedDocuments(payload);
+        payload = stripped.text;
+        documents_stripped_count += stripped.count;
+      }
+      if (difference_list && difference_list !== 'NULL') {
+        const stripped = stripEmbeddedDocuments(difference_list);
+        difference_list = stripped.text;
+        documents_stripped_count += stripped.count;
+      }
+
+      if (payload && payload !== 'NULL') {
+        if (payload.length > MAX_PARSE_CHARS) {
           payload_oversized = true;
-          payload_updated_ts = extractUpdatedTimestamp(event.payload);
+          payload_updated_ts = extractUpdatedTimestamp(payload);
         } else {
           try {
-            parsed_payload = JSON.parse(event.payload);
+            parsed_payload = JSON.parse(payload);
             payload_updated_ts = parsed_payload.updatedTimestamp || parsed_payload.updated_timestamp;
             if (parsed_payload.differences && Array.isArray(parsed_payload.differences)) {
               parsed_difference_list = parsed_payload.differences;
@@ -133,13 +169,13 @@ const processAuditData = (events: any[]): any[] => {
         }
       }
 
-      if (event.difference_list && event.difference_list !== 'NULL' && !parsed_difference_list) {
-        if (event.difference_list.length > MAX_PARSE_CHARS) {
+      if (difference_list && difference_list !== 'NULL' && !parsed_difference_list) {
+        if (difference_list.length > MAX_PARSE_CHARS) {
           payload_oversized = true;
-          if (!payload_updated_ts) payload_updated_ts = extractUpdatedTimestamp(event.difference_list);
+          if (!payload_updated_ts) payload_updated_ts = extractUpdatedTimestamp(difference_list);
         } else {
           try {
-            parsed_difference_list = JSON.parse(event.difference_list);
+            parsed_difference_list = JSON.parse(difference_list);
             if (Array.isArray(parsed_difference_list) && !payload_updated_ts) {
               const uTs = parsed_difference_list.find((d: any) => d.field === 'updatedTimestamp');
               if (uTs) payload_updated_ts = uTs.newValue;
@@ -167,9 +203,15 @@ const processAuditData = (events: any[]): any[] => {
         // Guaranteed-unique key so react-data-grid never collapses rows that share
         // (or lack) an id/timestamp. Without this, fragment rows render blank.
         _rowId: index,
+        // Overwrite with the document-stripped versions so every downstream consumer (grid,
+        // search index, raw viewer, CSV export, AI analysis) sees the smaller text, not the
+        // original blob-laden one.
+        payload,
+        difference_list,
         parsed_payload,
         parsed_difference_list,
         payload_oversized,
+        documents_stripped_count,
         _searchable_text: null,
         business_timestamp,
         raw_business_time,

@@ -93,6 +93,7 @@ export type ProcessedAuditEvent = AuditEvent & {
     parsed_payload: any;
     parsed_difference_list: any;
     payload_oversized?: boolean; // true when payload/difference_list was too large to JSON.parse
+    documents_stripped_count?: number; // number of embedded base64 documents removed from payload/difference_list
     _searchable_text: string | null; // Lazily computed on first search
     business_timestamp: string;
     raw_business_time: number;
@@ -255,8 +256,15 @@ export const renderDetails = (event: ProcessedAuditEvent) => {
 
     return (
         <div className="p-4 space-y-6">
+            {!!event.documents_stripped_count && (
+                <p className="text-xs text-muted-foreground italic bg-muted/30 rounded-md px-3 py-2">
+                    {event.documents_stripped_count === 1
+                        ? '1 embedded document (e.g. an attached PDF/file) was removed from this record\'s payload to keep it readable — see the placeholder in Raw Details below for its approximate size. Refer to the original export to retrieve the document itself.'
+                        : `${event.documents_stripped_count} embedded documents were removed from this record's payload to keep it readable — see the placeholders in Raw Details below for their approximate sizes. Refer to the original export to retrieve the documents themselves.`}
+                </p>
+            )}
             {formattedView || <p className="text-sm text-muted-foreground">No details to display.</p>}
-            
+
             {hasRawDetails && (
                 <Accordion type="single" collapsible className="w-full pt-4">
                     <AccordionItem value="item-1">
