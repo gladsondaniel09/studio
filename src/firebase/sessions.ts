@@ -1,7 +1,7 @@
 'use client';
 
 import { getApp } from 'firebase/app';
-import { getStorage, ref, uploadBytes, getBlob, deleteObject } from 'firebase/storage';
+import { getStorage, ref, uploadBytes, deleteObject } from 'firebase/storage';
 import {
   collection,
   doc,
@@ -131,7 +131,13 @@ export async function getSessionAnalyses(
 }
 
 export async function downloadSessionFile(storageRef: string): Promise<ArrayBuffer> {
-  const storage = getStorage(getApp());
-  const blob = await getBlob(ref(storage, storageRef));
-  return blob.arrayBuffer();
+  // Fetching Storage's ?alt=media endpoint directly from the browser fails with a CORS error —
+  // this app's Vercel domain isn't in the bucket's CORS allowlist. Routed through a same-origin
+  // API route instead (see src/app/api/session-file/route.ts), which fetches it server-side.
+  const response = await fetch(`/api/session-file?path=${encodeURIComponent(storageRef)}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Failed to download session file (${response.status})`);
+  }
+  return response.arrayBuffer();
 }
