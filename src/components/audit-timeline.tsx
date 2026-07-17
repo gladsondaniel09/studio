@@ -7,7 +7,7 @@ import {
   VerticalTimelineElement,
 } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { AlertTriangle, File, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { AlertTriangle, File as FileIcon, Lock, User, UserPlus, UploadCloud, Eye, ArrowRight, Search, Maximize, Code, Sparkles, Loader, ArrowUp, ArrowDown, Copy, HelpCircle, Wand2, ChevronDown, List, TableIcon, Info, ListOrdered, AlertCircle, TestTube2, ChevronRight as ChevronRightIcon, Minus, Plus, Download, ClipboardList, Clock, Layers, ShieldCheck, CheckCircle2, XCircle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { ScrollArea } from './ui/scroll-area';
@@ -103,14 +103,14 @@ export type ProcessedAuditEvent = AuditEvent & {
 
 const getIconForEvent = (eventType: string) => {
   if (typeof eventType !== 'string') {
-    return <File />;
+    return <FileIcon />;
   }
   const lowerCaseEvent = eventType.toLowerCase();
   if (lowerCaseEvent.includes('login')) {
     return <Lock />;
   }
   if (lowerCaseEvent.includes('upload') || lowerCaseEvent.includes('download')) {
-    return <File />;
+    return <FileIcon />;
   }
   if (lowerCaseEvent.includes('deactivated')) {
     return <AlertTriangle />;
@@ -122,9 +122,9 @@ const getIconForEvent = (eventType: string) => {
     return <User />;
   }
    if (lowerCaseEvent.includes('update') || lowerCaseEvent.includes('create') || lowerCaseEvent.includes('delete')) {
-    return <File />;
+    return <FileIcon />;
   }
-  return <File />;
+  return <FileIcon />;
 };
 
 const TruncatedValue = ({ value }: { value: any }) => {
