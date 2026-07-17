@@ -1,0 +1,20 @@
+rules_version = '2';
+
+/**
+ * FIREBASE STORAGE SECURITY RULES
+ *
+ * Matches src/firebase/sessions.ts, which uploads the raw session file to
+ * sessions/{sessionId}/{fileName} and deletes it from the same path. No
+ * storage.rules file previously existed in this repo, so uploads/downloads/
+ * deletes against this path were subject to whatever default rules the
+ * Firebase Console had configured (or none at all) — this makes the rule
+ * explicit and consistent with the Firestore rules for /sessions.
+ */
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /sessions/{sessionId}/{fileName} {
+      allow read, write, delete: if request.auth != null;
+    }
+  }
+}
